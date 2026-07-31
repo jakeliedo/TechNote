@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#5BA4CF">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="TechNote">
+  <title>TechNote</title>
+  <link rel="manifest" href="/manifest.json">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<div class="app-shell">
+
+  <!-- ── LOGIN ─────────────────────────────────────── -->
+  <div id="screen-login" class="screen-login">
+    <div class="login-inner">
+      <h1 class="login-title">TechNote</h1>
+      <form id="login-form">
+        <input id="login-nickname" class="input" type="text"
+               placeholder="Nickname" autocomplete="username" autocapitalize="none">
+        <input id="login-password" class="input" type="password"
+               placeholder="Mật khẩu" autocomplete="current-password">
+        <p id="login-error" class="login-error hidden">Nickname hoặc mật khẩu không đúng</p>
+        <button id="login-btn" class="btn btn-primary" type="submit">ĐĂNG NHẬP</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ── MAIN APP ───────────────────────────────────── -->
+  <div id="app" class="app hidden">
+
+    <header class="app-header">
+      <span id="header-title" class="header-title">TechNote</span>
+      <button id="settings-btn" class="icon-btn" aria-label="Cài đặt">⚙️</button>
+    </header>
+
+    <div id="offline-banner" class="offline-banner hidden">
+      📡 Offline — note sẽ gửi khi có mạng
+    </div>
+
+    <main class="app-main">
+
+      <!-- Home -->
+      <div id="tab-home" class="tab-screen">
+        <textarea id="report-input" class="report-textarea"
+                  placeholder="Nhập báo cáo tại đây..."></textarea>
+        <button id="send-btn" class="btn btn-primary btn-send">GỬI</button>
+      </div>
+
+      <!-- Feed -->
+      <div id="tab-feed" class="tab-screen hidden">
+        <div class="toolbar">
+          <button id="mark-all-btn" class="btn-text hidden">Đọc tất cả</button>
+        </div>
+        <div id="feed-list" class="card-list"></div>
+        <div id="feed-empty" class="empty-state hidden">
+          <div class="empty-icon">🔔</div>
+          <p>Không có báo cáo mới</p>
+        </div>
+      </div>
+
+      <!-- Activity -->
+      <div id="tab-activity" class="tab-screen hidden">
+        <div id="activity-list" class="card-list"></div>
+        <div id="activity-empty" class="empty-state hidden">
+          <div class="empty-icon">📋</div>
+          <p>Bạn chưa gửi báo cáo nào trong 48 giờ qua</p>
+        </div>
+      </div>
+
+      <!-- History -->
+      <div id="tab-history" class="tab-screen hidden">
+        <div id="history-list" class="card-list"></div>
+        <div id="history-empty" class="empty-state hidden">
+          <div class="empty-icon">🕐</div>
+          <p>Không có báo cáo trong 5 ngày qua</p>
+        </div>
+      </div>
+
+    </main>
+
+    <nav class="tab-bar">
+      <button class="tab-btn active" data-tab="home">
+        <span class="tab-icon">📝</span>
+        <span class="tab-label">Home</span>
+      </button>
+      <button class="tab-btn" data-tab="feed">
+        <span class="tab-icon">🔔</span>
+        <span class="tab-label">Feed</span>
+        <span id="feed-badge" class="tab-badge hidden">0</span>
+      </button>
+      <button class="tab-btn" data-tab="activity">
+        <span class="tab-icon">📋</span>
+        <span class="tab-label">Activity</span>
+      </button>
+      <button class="tab-btn" data-tab="history">
+        <span class="tab-icon">🕐</span>
+        <span class="tab-label">History</span>
+      </button>
+    </nav>
+
+  </div><!-- /#app -->
+
+  <!-- ── SETTINGS MODAL ────────────────────────────── -->
+  <div id="settings-modal" class="modal-overlay hidden">
+    <div class="modal-sheet">
+      <div class="modal-header">
+        <h2 class="modal-title">Cài đặt</h2>
+        <button id="settings-close" class="icon-btn">✕</button>
+      </div>
+      <label class="form-label">Nickname</label>
+      <input id="settings-name" class="input" type="text" maxlength="50">
+      <label class="form-label">Màu hiển thị</label>
+      <div id="color-picker" class="color-picker"></div>
+      <button id="settings-save" class="btn btn-primary">Lưu thay đổi</button>
+      <button id="settings-logout" class="btn btn-danger">Đăng xuất</button>
+    </div>
+  </div>
+
+  <!-- ── AWAY-LOG OVERLAY ───────────────────────────── -->
+  <div id="away-overlay" class="away-overlay hidden">
+    <div class="away-header">
+      <h2 id="away-title" class="away-title"></h2>
+      <p id="away-subtitle" class="away-subtitle"></p>
+    </div>
+    <div id="away-list" class="card-list away-list"></div>
+    <div class="away-footer">
+      <button id="away-close" class="btn btn-primary">Đã xem — Đóng</button>
+    </div>
+  </div>
+
+  <!-- ── TOAST ─────────────────────────────────────── -->
+  <div id="toast" class="toast hidden"></div>
+
+</div><!-- /.app-shell -->
+
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-messaging-compat.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>
