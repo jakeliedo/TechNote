@@ -33,6 +33,7 @@ class User(Base):
     devices: Mapped[list["Device"]] = relationship("Device", back_populates="user")
     reports: Mapped[list["Report"]] = relationship("Report", back_populates="user")
     reads: Mapped[list["ReportRead"]] = relationship("ReportRead", back_populates="user")
+    checks: Mapped[list["ReportCheck"]] = relationship("ReportCheck", back_populates="user")
 
 
 class Device(Base):
@@ -68,6 +69,7 @@ class Report(Base):
 
     user: Mapped["User"] = relationship("User", back_populates="reports")
     reads: Mapped[list["ReportRead"]] = relationship("ReportRead", back_populates="report")
+    checks: Mapped[list["ReportCheck"]] = relationship("ReportCheck", back_populates="report")
 
 
 class ReportRead(Base):
@@ -84,3 +86,19 @@ class ReportRead(Base):
 
     report: Mapped["Report"] = relationship("Report", back_populates="reads")
     user: Mapped["User"] = relationship("User", back_populates="reads")
+
+
+class ReportCheck(Base):
+    __tablename__ = "report_checks"
+    __table_args__ = (
+        Index("ix_report_checks_user_id", "user_id"),
+    )
+
+    report_id: Mapped[int] = mapped_column(ForeignKey("reports.id"), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    checked_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    report: Mapped["Report"] = relationship("Report", back_populates="checks")
+    user: Mapped["User"] = relationship("User", back_populates="checks")

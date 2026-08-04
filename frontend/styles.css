@@ -409,6 +409,47 @@ input, textarea { font-family: inherit; font-size: inherit; outline: none; }
   min-width: 0;
 }
 
+/* ── Check Button ─────────────────────────────────────────────────────────── */
+.card-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 6px;
+}
+
+.check-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-2);
+  background: var(--bg-page);
+  border: 1.5px solid var(--border);
+  cursor: pointer;
+  line-height: 1.6;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  user-select: none;
+}
+.check-btn:hover:not(.checked-by-me) {
+  background: var(--accent-light);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.check-btn.checked-by-me {
+  background: #F0FFF4;
+  color: #276749;
+  border-color: #9AE6B4;
+}
+.check-count { font-size: 12px; }
+.check-indicator {
+  font-size: 12px;
+  color: var(--text-2);
+  font-weight: 600;
+  padding: 3px 0;
+}
+
 /* ── Away Overlay ─────────────────────────────────────────────────────────── */
 .away-overlay {
   position: absolute;

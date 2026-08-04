@@ -140,6 +140,19 @@ function dateKey(iso) {
 // ── Report Card ───────────────────────────────────────────────────────────────
 function reportCard(r, { unread = false } = {}) {
   const color = r.user?.badge_color || ACCENT;
+  const isOwn = r.user_id === state.user?.id;
+  const checkCount = r.check_count || 0;
+  const checkedByMe = r.checked_by_me || false;
+
+  const footerHtml = isOwn
+    ? `<div class="card-footer"><span class="check-indicator">${checkCount > 0 ? '✓ ' + checkCount : ''}</span></div>`
+    : `<div class="card-footer">
+        <button class="check-btn${checkedByMe ? ' checked-by-me' : ''}"
+                data-id="${r.id}" data-checked="${checkedByMe ? '1' : '0'}" title="Noted">
+          ✓<span class="check-count">${checkCount > 0 ? ' ' + checkCount : ''}</span>
+        </button>
+       </div>`;
+
   return `
     <div class="report-card${unread ? ' unread' : ''}" data-id="${r.id}">
       <div class="card-meta">
@@ -150,16 +163,37 @@ function reportCard(r, { unread = false } = {}) {
         <span class="card-time">${fmtTime(r.created_at)}</span>
       </div>
       <div class="card-body">${esc(r.body)}</div>
+      ${footerHtml}
     </div>`;
 }
 
 function bindCardRead(container) {
-  container.querySelectorAll('.report-card.unread').forEach(card => {
-    card.addEventListener('click', async () => {
+  container.querySelectorAll('.report-card.unread:not([data-read-bound])').forEach(card => {
+    card.dataset.readBound = '1';
+    card.addEventListener('click', async e => {
+      if (e.target.closest('.check-btn')) return;
       const id = Number(card.dataset.id);
       await api('POST', `/reports/${id}/read`).catch(() => {});
       card.classList.remove('unread');
       setUnread(document.querySelectorAll('#feed-list .report-card.unread').length);
+    });
+  });
+}
+
+function bindCheckBtns(container) {
+  container.querySelectorAll('.check-btn:not([data-bound])').forEach(btn => {
+    btn.dataset.bound = '1';
+    btn.addEventListener('click', async e => {
+      e.stopPropagation();
+      const reportId = Number(btn.dataset.id);
+      try {
+        const res = await api('POST', `/reports/${reportId}/check`);
+        btn.dataset.checked = res.checked ? '1' : '0';
+        btn.classList.toggle('checked-by-me', res.checked);
+        btn.querySelector('.check-count').textContent = res.check_count > 0 ? ' ' + res.check_count : '';
+      } catch {
+        toast('Lỗi', 'error');
+      }
     });
   });
 }
@@ -261,7 +295,9 @@ async function checkAwayLogic() {
   document.getElementById('away-title').textContent = `Bạn đã vắng mặt ${hours} giờ`;
   document.getElementById('away-subtitle').textContent =
     `Có ${reports.length} báo cáo mới trong lúc bạn vắng`;
-  document.getElementById('away-list').innerHTML = reports.map(r => reportCard(r)).join('');
+  const awayList = document.getElementById('away-list');
+  awayList.innerHTML = reports.map(r => reportCard(r)).join('');
+  bindCheckBtns(awayList);
   document.getElementById('away-overlay').classList.remove('hidden');
 }
 
@@ -306,6 +342,7 @@ async function loadFeed() {
   list.innerHTML = reports.map(r => reportCard(r, { unread: true })).join('');
   setUnread(reports.length);
   bindCardRead(list);
+  bindCheckBtns(list);
 }
 
 function setUnread(n) {
@@ -328,6 +365,7 @@ async function loadActivity() {
   if (!reports.length) { list.innerHTML = ''; empty.classList.remove('hidden'); return; }
   empty.classList.add('hidden');
   list.innerHTML = reports.map(r => reportCard(r)).join('');
+  bindCheckBtns(list);
 }
 
 // ── History ───────────────────────────────────────────────────────────────────
@@ -356,6 +394,7 @@ async function loadHistory() {
     html += groups[k].map(r => reportCard(r)).join('');
   }
   list.innerHTML = html;
+  bindCheckBtns(list);
 }
 
 // ── Send report ───────────────────────────────────────────────────────────────
@@ -441,7 +480,11 @@ function connectWS() {
   state.ws = ws;
 
   ws.onmessage = e => {
-    try { onNewReport(JSON.parse(e.data)); } catch {}
+    try {
+      const msg = JSON.parse(e.data);
+      if (msg.type === 'check') onCheckUpdate(msg);
+      else onNewReport(msg);
+    } catch {}
   };
   ws.onclose = () => {
     state.ws = null;
@@ -460,7 +503,18 @@ function onNewReport(r) {
     document.getElementById('mark-all-btn').classList.remove('hidden');
     list.insertAdjacentHTML('afterbegin', reportCard(r, { unread: true }));
     bindCardRead(list);
+    bindCheckBtns(list);
   }
+}
+
+function onCheckUpdate({ report_id, check_count, user_id }) {
+  // Skip echo of own action — UI already updated by API response
+  if (user_id === state.user?.id) return;
+  const countText = check_count > 0 ? ' ' + check_count : '';
+  document.querySelectorAll(`.report-card[data-id="${report_id}"] .check-btn .check-count`)
+    .forEach(el => { el.textContent = countText; });
+  document.querySelectorAll(`.report-card[data-id="${report_id}"] .check-indicator`)
+    .forEach(el => { el.textContent = check_count > 0 ? '✓ ' + check_count : ''; });
 }
 
 // ── Settings ──────────────────────────────────────────────────────────────────

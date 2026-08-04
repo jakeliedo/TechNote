@@ -3,13 +3,13 @@ from datetime import datetime
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from server.auth import get_current_user
 from server.database import get_db
-from server.models import Report, ReportRead, User
+from server.models import Report, ReportCheck, ReportRead, User
 from server import fcm
 from server.ws import manager as ws_manager
 
@@ -38,6 +38,13 @@ class ReportOut(BaseModel):
     created_at: datetime
     client_uuid: uuid_lib.UUID | None
     user: AuthorOut
+    check_count: int = 0
+    checked_by_me: bool = False
+
+
+class CheckResponse(BaseModel):
+    checked: bool
+    check_count: int
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -50,6 +57,33 @@ async def _load_report(db: AsyncSession, report_id: int) -> Report:
     if report is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found")
     return report
+
+
+async def _enrich(reports: list[Report], db: AsyncSession, current_user_id: int) -> list[ReportOut]:
+    if not reports:
+        return []
+    ids = [r.id for r in reports]
+
+    cnt_rows = (await db.execute(
+        select(ReportCheck.report_id, func.count().label("n"))
+        .where(ReportCheck.report_id.in_(ids))
+        .group_by(ReportCheck.report_id)
+    )).all()
+    counts = {row.report_id: row.n for row in cnt_rows}
+
+    my_rows = (await db.execute(
+        select(ReportCheck.report_id)
+        .where(ReportCheck.report_id.in_(ids), ReportCheck.user_id == current_user_id)
+    )).scalars().all()
+    mine = set(my_rows)
+
+    result = []
+    for r in reports:
+        out = ReportOut.model_validate(r)
+        out.check_count = counts.get(r.id, 0)
+        out.checked_by_me = r.id in mine
+        result.append(out)
+    return result
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -114,8 +148,8 @@ async def list_reports(
         q = q.where(Report.user_id == current_user.id)
     q = q.limit(limit).offset(offset)
 
-    result = await db.execute(q)
-    return result.scalars().all()
+    reports = (await db.execute(q)).scalars().all()
+    return await _enrich(list(reports), db, current_user.id)
 
 
 @router.get("/reports/unread", response_model=list[ReportOut])
@@ -130,8 +164,8 @@ async def unread_reports(
         .where(Report.id.not_in(already_read))
         .order_by(Report.created_at.asc())
     )
-    result = await db.execute(q)
-    return result.scalars().all()
+    reports = (await db.execute(q)).scalars().all()
+    return await _enrich(list(reports), db, current_user.id)
 
 
 @router.post("/reports/{report_id}/read", status_code=status.HTTP_204_NO_CONTENT)
@@ -153,3 +187,44 @@ async def mark_read(
     if existing.scalar_one_or_none() is None:
         db.add(ReportRead(report_id=report_id, user_id=current_user.id))
         await db.commit()
+
+
+@router.post("/reports/{report_id}/check", response_model=CheckResponse)
+async def toggle_check(
+    report_id: int,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    report = await _load_report(db, report_id)
+    if report.user_id == current_user.id:
+        raise HTTPException(status_code=422, detail="Cannot check your own report")
+
+    row = (await db.execute(
+        select(ReportCheck).where(
+            ReportCheck.report_id == report_id,
+            ReportCheck.user_id == current_user.id,
+        )
+    )).scalar_one_or_none()
+
+    if row:
+        await db.delete(row)
+        checked = False
+    else:
+        db.add(ReportCheck(report_id=report_id, user_id=current_user.id))
+        checked = True
+    await db.commit()
+
+    check_count = (await db.execute(
+        select(func.count()).select_from(ReportCheck).where(ReportCheck.report_id == report_id)
+    )).scalar()
+
+    background_tasks.add_task(ws_manager.broadcast, {
+        "type": "check",
+        "report_id": report_id,
+        "check_count": check_count,
+        "user_id": current_user.id,
+        "checked": checked,
+    })
+
+    return CheckResponse(checked=checked, check_count=check_count)
