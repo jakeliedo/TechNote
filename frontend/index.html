@@ -24,7 +24,7 @@
                placeholder="Nickname" autocomplete="username" autocapitalize="none">
         <input id="login-password" class="input" type="password"
                placeholder="Mật khẩu" autocomplete="current-password">
-        <p id="login-error" class="login-error hidden">Nickname hoặc mật khẩu không đúng</p>
+        <p id="login-error" class="login-error hidden"></p>
         <button id="login-btn" class="btn btn-primary" type="submit">ĐĂNG NHẬP</button>
       </form>
     </div>
@@ -113,7 +113,10 @@
         <button id="settings-close" class="icon-btn">✕</button>
       </div>
       <label class="form-label">Nickname</label>
-      <input id="settings-name" class="input" type="text" maxlength="50">
+      <div class="name-edit-row">
+        <span id="settings-username-prefix" class="name-fixed-prefix"></span>
+        <input id="settings-suffix" class="input name-suffix-input" type="text" maxlength="30" placeholder="hậu tố...">
+      </div>
       <label class="form-label">Màu hiển thị</label>
       <div id="color-picker" class="color-picker"></div>
       <button id="settings-save" class="btn btn-primary">Lưu thay đổi</button>

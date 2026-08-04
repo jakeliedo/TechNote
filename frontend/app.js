@@ -48,6 +48,16 @@ const TZ = 'Asia/Ho_Chi_Minh';
 const BADGE_COLORS = [
   '#E53E3E','#DD6B20','#D69E2E','#38A169',
   '#319795','#3182CE','#553C9A','#805AD5','#D53F8C','#718096',
+  'linear-gradient(135deg,#FF6B6B,#FFE66D)',
+  'linear-gradient(135deg,#4ECDC4,#44A08D)',
+  'linear-gradient(135deg,#667eea,#764ba2)',
+  'linear-gradient(135deg,#f093fb,#f5576c)',
+  'linear-gradient(135deg,#4facfe,#00f2fe)',
+  'linear-gradient(135deg,#43e97b,#38f9d7)',
+  'linear-gradient(135deg,#fa709a,#fee140)',
+  'linear-gradient(135deg,#a18cd1,#fbc2eb)',
+  'linear-gradient(135deg,#30cfd0,#330867)',
+  'linear-gradient(135deg,#f7971e,#ffd200)',
 ];
 const HEADER_LABELS = {
   home: 'TechNote', feed: 'Feed', activity: 'Activity (48h)', history: 'History',
@@ -62,6 +72,7 @@ const state = {
   wsTimer: null,
   unreadCount: 0,
   selectedColor: ACCENT,
+  allUsers: [],
 };
 
 // ── API helper ────────────────────────────────────────────────────────────────
@@ -100,15 +111,24 @@ function fmtTime(iso) {
   });
 }
 
+function ordinal(n) {
+  const s = ['th','st','nd','rd'];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
+
 function fmtDateLabel(iso) {
   const d = new Date(iso);
-  const toVN = dt => dt.toLocaleDateString('vi-VN', { timeZone: TZ });
+  const toKey = dt => dt.toLocaleDateString('en-US', { timeZone: TZ });
   const today = new Date();
   const yest  = new Date(today); yest.setDate(yest.getDate() - 1);
-  const ddmm  = d.toLocaleDateString('vi-VN', { day:'2-digit', month:'2-digit', timeZone: TZ });
-  if (toVN(d) === toVN(today)) return `Hôm nay, ${ddmm}`;
-  if (toVN(d) === toVN(yest))  return `Hôm qua, ${ddmm}`;
-  return ddmm;
+  const month = d.toLocaleDateString('en-US', { month: 'long', timeZone: TZ });
+  const day   = Number(d.toLocaleDateString('en-US', { day: 'numeric', timeZone: TZ }));
+  const year  = d.toLocaleDateString('en-US', { year: 'numeric', timeZone: TZ });
+  const label = `${month} ${ordinal(day)} ${year}`;
+  if (toKey(d) === toKey(today)) return `Today, ${label}`;
+  if (toKey(d) === toKey(yest))  return `Yesterday, ${label}`;
+  return label;
 }
 
 function dateKey(iso) {
@@ -149,12 +169,14 @@ async function login(nickname, password) {
   const data = await api('POST', '/auth/login', { nickname, password });
   state.token = data.access_token;
   localStorage.setItem('jwt', state.token);
+  localStorage.setItem('device_owner', nickname);
 }
 
 function logout() {
   state.token = null;
   state.user = null;
   localStorage.removeItem('jwt');
+  localStorage.removeItem('device_owner');
   if (state.ws) { state.ws.close(); state.ws = null; }
   clearTimeout(state.wsTimer);
   closeSettings();
@@ -187,8 +209,31 @@ function showApp() {
   initPush();
 }
 
+async function autoAssignColor() {
+  try {
+    const users = await api('GET', '/users');
+    state.allUsers = users || [];
+    const myColor = state.user?.badge_color;
+    const takenByOthers = new Set(
+      state.allUsers.filter(u => u.id !== state.user?.id).map(u => u.badge_color)
+    );
+    if (!takenByOthers.has(myColor)) return;
+    const free = BADGE_COLORS.find(c => !takenByOthers.has(c));
+    if (!free) return;
+    state.user = await api('PUT', '/users/me', {
+      display_name: state.user.display_name,
+      badge_color: free,
+    });
+    const idx = state.allUsers.findIndex(u => u.id === state.user.id);
+    if (idx >= 0) state.allUsers[idx] = { ...state.allUsers[idx], badge_color: free };
+  } catch (e) {
+    console.warn('autoAssignColor failed:', e);
+  }
+}
+
 async function onAppStart() {
   updateNetworkBanner();
+  await autoAssignColor();
   await checkAwayLogic();
   connectWS();
   processOfflineQueue();
@@ -421,7 +466,15 @@ function onNewReport(r) {
 // ── Settings ──────────────────────────────────────────────────────────────────
 function openSettings() {
   state.selectedColor = state.user?.badge_color || ACCENT;
-  document.getElementById('settings-name').value = state.user?.display_name || '';
+  const fixed = state.user?.username || state.user?.display_name || '';
+  const current = state.user?.display_name || '';
+  const suffix = current.startsWith(fixed + ' | ') ? current.slice(fixed.length + 3) : '';
+  document.getElementById('settings-username-prefix').textContent = fixed;
+  document.getElementById('settings-suffix').value = suffix;
+  // Refresh allUsers for accurate taken list
+  api('GET', '/users').then(users => {
+    if (users) { state.allUsers = users; renderColorPicker(); }
+  }).catch(() => {});
   renderColorPicker();
   document.getElementById('settings-modal').classList.remove('hidden');
 }
@@ -431,13 +484,19 @@ function closeSettings() {
 }
 
 function renderColorPicker() {
+  const myId = state.user?.id;
+  const taken = new Set(
+    (state.allUsers || []).filter(u => u.id !== myId).map(u => u.badge_color)
+  );
   document.getElementById('color-picker').innerHTML = BADGE_COLORS.map(c => {
     const sel = c === state.selectedColor;
-    return `<button class="color-swatch${sel ? ' selected' : ''}"
-               style="background:${c};${sel ? `color:${c}` : ''}"
-               data-color="${c}" aria-label="${c}">${sel ? '✓' : ''}</button>`;
+    const isTaken = taken.has(c);
+    const tick = sel ? '✓' : (isTaken ? '✕' : '');
+    return `<button class="color-swatch${sel ? ' selected' : ''}${isTaken ? ' taken' : ''}"
+               style="background:${c}" data-color="${c}" aria-label="${c}"
+               ${isTaken ? 'disabled' : ''}>${tick}</button>`;
   }).join('');
-  document.getElementById('color-picker').querySelectorAll('.color-swatch').forEach(btn => {
+  document.getElementById('color-picker').querySelectorAll('.color-swatch:not([disabled])').forEach(btn => {
     btn.addEventListener('click', () => {
       state.selectedColor = btn.dataset.color;
       renderColorPicker();
@@ -446,11 +505,12 @@ function renderColorPicker() {
 }
 
 async function saveSettings() {
-  const name = document.getElementById('settings-name').value.trim();
-  if (!name) { toast('Nickname không được để trống', 'error'); return; }
+  const suffix = document.getElementById('settings-suffix').value.trim();
+  const fixed = state.user?.username || state.user?.display_name || '';
+  const displayName = suffix ? `${fixed} | ${suffix}` : fixed;
   try {
     state.user = await api('PUT', '/users/me', {
-      display_name: name,
+      display_name: displayName,
       badge_color: state.selectedColor,
     });
     closeSettings();
@@ -479,6 +539,13 @@ document.getElementById('login-form').addEventListener('submit', async e => {
   const btn = document.getElementById('login-btn');
   const err = document.getElementById('login-error');
 
+  const owner = localStorage.getItem('device_owner');
+  if (owner && owner.toLowerCase() !== nickname.toLowerCase()) {
+    err.textContent = `Thiết bị này thuộc về "${owner}". Liên hệ quản trị để đổi.`;
+    err.classList.remove('hidden');
+    return;
+  }
+
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span>';
   err.classList.add('hidden');
@@ -490,6 +557,7 @@ document.getElementById('login-form').addEventListener('submit', async e => {
     btn.disabled = false;
     showApp();
   } catch {
+    err.textContent = 'Nickname hoặc mật khẩu không đúng';
     err.classList.remove('hidden');
     btn.innerHTML = 'ĐĂNG NHẬP';
     btn.disabled = false;

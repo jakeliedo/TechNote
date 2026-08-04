@@ -14,6 +14,9 @@ Real-time internal report logging PWA for technical teams. Staff submit instant 
 - **Offline queue** — notes saved locally and auto-synced on reconnect
 - **Away log** — reopening after 2h shows a summary of missed reports
 - **Single-session login** — new login automatically invalidates previous session
+- **Single-device lock** — a device stays bound to one user account (prevents sharing)
+- **Auto badge color** — each user gets a unique color on login (20 options: solid + gradient); color picker blocks already-taken colors
+- **Display name suffix** — fixed login name + optional personal suffix ("Liem | on-duty")
 - **PWA installable** — works as native-like app on iOS (Safari → Add to Home Screen) and Android
 
 ---
@@ -67,9 +70,10 @@ technote/
 ## API Endpoints
 
 ```
-POST /auth/login          nickname + password → JWT
+POST /auth/login          nickname (username or display_name) + password → JWT
 GET  /users/me            current user profile
-PUT  /users/me            update display name + badge color
+PUT  /users/me            update display_name suffix + badge_color
+GET  /users               list all active users with badge colors
 POST /devices/register    register FCM token
 
 POST /reports             create report (FCM + WebSocket broadcast)
@@ -85,14 +89,16 @@ WS   /ws?token=<jwt>      real-time push to connected clients
 ## Database Schema
 
 ```sql
-users        (id, display_name, email, phone, password_hash, is_active, badge_color, token_version)
+users        (id, display_name, username, email, phone, password_hash, is_active, badge_color, token_version)
 devices      (id, user_id, platform, fcm_token, last_seen)
 reports      (id, user_id, body, created_at, client_uuid)
 report_reads (report_id, user_id, read_at)
 ```
 
+- `username` — fixed login name (immutable); `display_name` = `username` or `username | suffix`
 - `client_uuid` — deduplication on retry
 - `token_version` — single-session enforcement (new login invalidates old JWT)
+- `badge_color` — hex or CSS `linear-gradient(...)`, auto-assigned unique per user
 - Timezone: stored UTC, displayed in Asia/Ho_Chi_Minh
 
 ---

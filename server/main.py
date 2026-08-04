@@ -8,7 +8,7 @@ from jose import JWTError, jwt
 from sqlalchemy import select
 
 from server.auth import JWT_ALGORITHM, JWT_SECRET
-from server.database import AsyncSessionLocal, create_tables
+from server.database import AsyncSessionLocal, create_tables, run_migrations
 from server.models import User
 from server.routes import devices, reports, users
 from server.ws import manager
@@ -17,6 +17,7 @@ from server.ws import manager
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     await create_tables()
+    await run_migrations()
     yield
 
 

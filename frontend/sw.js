@@ -11,7 +11,7 @@ firebase.initializeApp({
 });
 const messaging = firebase.messaging();
 
-const CACHE = 'technote-v4';
+const CACHE = 'technote-v5';
 const PRECACHE = ['/manifest.json'];
 const CACHE_FIRST = ['/icons/', '/manifest'];
 
@@ -61,17 +61,9 @@ self.addEventListener('fetch', e => {
   }
 });
 
-// Firebase handles push events; this fires when app is closed/background
-messaging.onBackgroundMessage(payload => {
-  const title = payload.notification?.title || 'TechNote';
-  const body  = payload.notification?.body  || '';
-  self.registration.showNotification(title, {
-    body,
-    icon:     '/icons/icon-192.png',
-    tag:      'technote',
-    renotify: true,
-  });
-});
+// Firebase automatically shows notification from payload.notification field.
+// onBackgroundMessage is kept for future data-only messages.
+messaging.onBackgroundMessage(_payload => {});
 
 self.addEventListener('notificationclick', e => {
   e.notification.close();

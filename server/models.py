@@ -25,6 +25,7 @@ class User(Base):
     email: Mapped[str] = mapped_column(Text, unique=True, nullable=False, index=True)
     phone: Mapped[str | None] = mapped_column(Text, nullable=True)
     password_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    username: Mapped[str | None] = mapped_column(Text, unique=True, nullable=True, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, server_default="true", nullable=False)
     badge_color: Mapped[str] = mapped_column(Text, nullable=False, default="#5BA4CF")
     token_version: Mapped[int] = mapped_column(Integer, server_default="1", nullable=False)

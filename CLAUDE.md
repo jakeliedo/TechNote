@@ -14,7 +14,7 @@ Staff submit instant notes ("fixing machine #30 — card reader not accepting ca
 | Backend | FastAPI + PostgreSQL + WebSocket |
 | Push | Firebase Cloud Messaging (FCM) |
 | Frontend | PWA (vanilla HTML/JS/CSS) — single codebase for mobile + desktop |
-| Server exposure | Cloudflare Tunnel (office PC, no static IP) |
+| Server exposure | ngrok free static domain (office PC, no static IP) |
 | Offline queue | LocalStorage → auto-sync on reconnect |
 
 No Flutter. No Electron. No Tauri. No AI extraction. No App Store or Play Store.
@@ -55,6 +55,22 @@ On app open:
 Uses `report_reads` table. Never modifies original report.
 Unread count = COUNT of reports with no matching row in report_reads for that user.
 
+### Badge color — auto-assign
+- 20 colors available: 10 solid hex + 10 CSS linear-gradient values
+- On login (`showApp`), `GET /users` → find first color not used by any other active user → `PUT /users/me` to assign it
+- Color picker in Settings only shows colors not taken by others (taken = dimmed + ✕, not selectable)
+
+### Display name — fixed prefix + editable suffix
+- Each user has a `username` column (seeded = original display_name, immutable via API)
+- `display_name` can be updated to either exactly `username` or `"username | <suffix>"`
+- Login accepts both `username` and `display_name` (OR query)
+- Settings UI: fixed prefix label + separate suffix input field
+
+### Single-device user lock
+- On login success, `device_owner` is stored in `localStorage`
+- Login blocked if `device_owner` exists and doesn't match the nickname being entered
+- Cleared on logout
+
 ---
 
 ## Database Schema
@@ -62,10 +78,14 @@ Unread count = COUNT of reports with no matching row in report_reads for that us
 ```sql
 users (
   id            SERIAL PRIMARY KEY,
-  display_name  TEXT NOT NULL,
+  display_name  TEXT NOT NULL UNIQUE,  -- editable: "username" or "username | suffix"
+  username      TEXT UNIQUE,           -- fixed login name (seeded from display_name)
   email         TEXT UNIQUE NOT NULL,
   phone         TEXT,
-  is_active     BOOLEAN DEFAULT true
+  password_hash TEXT NOT NULL,
+  is_active     BOOLEAN DEFAULT true,
+  badge_color   TEXT NOT NULL,         -- hex "#RRGGBB" or "linear-gradient(...)"
+  token_version INT DEFAULT 1          -- incremented on each login to invalidate old JWT
 )
 
 devices (
@@ -100,27 +120,29 @@ Timezone: store UTC, display in Asia/Ho_Chi_Minh.
 ## API Endpoints
 
 ```
-POST /auth/login          email + password → JWT token
+POST /auth/login          nickname (username or display_name) + password → JWT
 GET  /users/me            current user profile
+PUT  /users/me            update display_name (suffix only) + badge_color
+GET  /users               list all active users (id, display_name, username, badge_color)
 POST /devices/register    register FCM token
 
-POST /reports             create report (triggers FCM push to all other users)
-GET  /reports             history — supports ?from=&to=&limit=&offset=
+POST /reports             create report (FCM + WebSocket broadcast as BackgroundTask)
+GET  /reports             history — supports ?from=&to=&limit=&offset=&mine=
 GET  /reports/unread      unread reports for current user
 POST /reports/{id}/read   mark as read
 
-WS   /ws                  WebSocket — real-time push to desktop clients
+WS   /ws?token=<jwt>      WebSocket — real-time push to connected clients
 ```
 
 ---
 
 ## PWA Screens
 
-1. **Login** — email + password, store JWT in LocalStorage
+1. **Login** — nickname + password, store JWT in LocalStorage; blocks second user on same device
 2. **Home** — full-screen text input + SEND button, primary screen
 3. **Away log** — shown when reopening after 2h, lists unread reports
-4. **History** — chronological feed, filterable by day / month / quarter / year
-5. **Settings** — change password, logout only
+4. **History** — chronological feed grouped by date ("August 8th 2026" format, English ordinal)
+5. **Settings** — edit display name suffix, pick badge color (free colors only), logout
 
 Minimal UI. Speed of input is the top priority. No "who is doing what" screen.
 
@@ -157,10 +179,12 @@ technote/
 ## Environment Variables
 
 ```env
-DATABASE_URL=postgresql://user:pass@localhost/technote
-JWT_SECRET=
-FCM_SERVER_KEY=
-CLOUDFLARE_TUNNEL_TOKEN=
+DATABASE_URL=postgresql+asyncpg://user:pass@localhost/technote
+JWT_SECRET=<long_random_secret>
+GOOGLE_APPLICATION_CREDENTIALS=server/firebase-service-account.json
+FCM_PROJECT_ID=<firebase_project_id>
+PUBLIC_URL=https://<your-ngrok-domain>.ngrok-free.app
+VAPID_PUBLIC_KEY=<vapid_key_from_firebase_console>
 ```
 
 ---
@@ -170,14 +194,22 @@ CLOUDFLARE_TUNNEL_TOKEN=
 - [x] Project scaffold (folders + empty files)
 - [x] Database layer (database.py + models.py)
 - [x] Auth (auth.py — JWT HS256, bcrypt, get_current_user dependency)
-- [x] API routes — users (login, me), devices (register), reports (CRUD + unread + read)
-- [x] FCM push (fcm.py — HTTP v1, Service Account, async broadcast)
+- [x] API routes — users (login, me, list), devices (register), reports (CRUD + unread + read)
+- [x] FCM push (fcm.py — HTTP v1, Service Account, async broadcast as BackgroundTask)
 - [x] main.py + WebSocket (FastAPI app entry, routers, /ws JWT auth, CORS, lifespan startup)
 - [x] Frontend PWA (login, home, feed, activity, history, settings, away-log, offline queue, WebSocket)
 - [x] Integration testing — 45/45 pytest tests pass (auth, devices, reports, users)
-- [ ] FCM configuration (Firebase service account JSON + project ID)
-- [ ] Cloudflare Tunnel setup
-- [ ] Production smoke test on mobile devices
+- [x] FCM configured (Firebase project `technote-clubv`, service account JSON, VAPID key)
+- [x] ngrok static domain (`snugly-gory-goofiness.ngrok-free.dev`) — replaces Cloudflare Tunnel
+- [x] Production smoke tested — push notifications working on iPhone + desktop Chrome
+- [x] Single-device user lock (device_owner in localStorage)
+- [x] Single-session login (token_version incremented on login)
+- [x] DB idle connection fix (pool_pre_ping + pool_recycle)
+- [x] Auto-assign unique badge color on login (20 colors: 10 solid + 10 gradient)
+- [x] Square badge dots + square color swatches
+- [x] English ordinal date format ("August 8th 2026") in History
+- [x] Display name = fixed username + optional " | suffix" (enforced server + client)
+- [x] `username` column added via runtime migration (ALTER TABLE ... ADD COLUMN IF NOT EXISTS)
 
 ## Dev Setup
 
@@ -204,3 +236,9 @@ docker-compose up -d db
 - `bcrypt==4.0.1` pinned — passlib 1.7.4 not compatible with bcrypt 5.x
 - `badge_color` uses Python-level `default=` not `server_default=` (prevents DDL quoting bug)
 - pytest.ini: `asyncio_default_fixture_loop_scope=session` + `asyncio_default_test_loop_scope=session` required for pytest-asyncio 1.4+ with asyncpg
+- `crypto.randomUUID()` — must call as method (not destructured); iOS Safari detaches `this` otherwise
+- `pool_pre_ping=True, pool_recycle=1800` on `create_async_engine` — prevents idle PostgreSQL connection timeout after hours of inactivity
+- FCM + WebSocket broadcasts moved to `BackgroundTask` — prevents POST /reports from blocking on push delivery
+- `requests==2.32.3` added to requirements — Google auth library dependency for FCM HTTP v1
+- Double notification fix: `onBackgroundMessage` left empty — Firebase SDK auto-shows notification from `notification` field; manual `showNotification` caused duplicates
+- `ngrok upgrade` required — version 3.3.1 too old for static domains; use `winget upgrade ngrok.ngrok`
