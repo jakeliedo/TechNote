@@ -8,6 +8,8 @@ services:
       POSTGRES_USER: technote
       POSTGRES_PASSWORD: technote
       POSTGRES_DB: technote
+    ports:
+      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
