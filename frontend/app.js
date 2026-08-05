@@ -63,6 +63,12 @@ const HEADER_LABELS = {
   home: 'TechNote', feed: 'Feed', activity: 'Activity (48h)', history: 'History',
 };
 
+const REACTIONS = [
+  { key: 'smile',    icon: '😄' },
+  { key: 'surprise', icon: '😮' },
+  { key: 'question', icon: '🤔' },
+];
+
 // ── State ─────────────────────────────────────────────────────────────────────
 const state = {
   token: localStorage.getItem('jwt'),
@@ -143,15 +149,24 @@ function reportCard(r, { unread = false } = {}) {
   const isOwn = r.user_id === state.user?.id;
   const checkCount = r.check_count || 0;
   const checkedByMe = r.checked_by_me || false;
+  const rxns = r.reactions || {};
+  const myRxn = r.my_reaction || null;
 
-  const footerHtml = isOwn
-    ? `<div class="card-footer"><span class="check-indicator">${checkCount > 0 ? '✓ ' + checkCount : ''}</span></div>`
-    : `<div class="card-footer">
-        <button class="check-btn${checkedByMe ? ' checked-by-me' : ''}"
-                data-id="${r.id}" data-checked="${checkedByMe ? '1' : '0'}" title="Noted">
-          ✓<span class="check-count">${checkCount > 0 ? ' ' + checkCount : ''}</span>
-        </button>
-       </div>`;
+  const reactionBarHtml = `<div class="reaction-bar">${
+    REACTIONS.map(({ key, icon }) => {
+      const count = rxns[key] || 0;
+      const active = myRxn === key;
+      return `<button class="reaction-btn${active ? ' active' : ''}" data-id="${r.id}" data-reaction="${key}">${
+        icon}<span class="reaction-count">${count > 0 ? count : ''}</span></button>`;
+    }).join('')
+  }</div>`;
+
+  const checkPartHtml = isOwn
+    ? `<span class="check-indicator">${checkCount > 0 ? '✓ ' + checkCount : ''}</span>`
+    : `<button class="check-btn${checkedByMe ? ' checked-by-me' : ''}"
+               data-id="${r.id}" data-checked="${checkedByMe ? '1' : '0'}" title="Noted">
+         ✓<span class="check-count">${checkCount > 0 ? ' ' + checkCount : ''}</span>
+       </button>`;
 
   return `
     <div class="report-card${unread ? ' unread' : ''}" data-id="${r.id}">
@@ -163,7 +178,10 @@ function reportCard(r, { unread = false } = {}) {
         <span class="card-time">${fmtTime(r.created_at)}</span>
       </div>
       <div class="card-body">${esc(r.body)}</div>
-      ${footerHtml}
+      <div class="card-footer">
+        ${reactionBarHtml}
+        ${checkPartHtml}
+      </div>
     </div>`;
 }
 
@@ -172,6 +190,7 @@ function bindCardRead(container) {
     card.dataset.readBound = '1';
     card.addEventListener('click', async e => {
       if (e.target.closest('.check-btn')) return;
+      if (e.target.closest('.reaction-btn')) return;
       const id = Number(card.dataset.id);
       await api('POST', `/reports/${id}/read`).catch(() => {});
       card.classList.remove('unread');
@@ -191,6 +210,31 @@ function bindCheckBtns(container) {
         btn.dataset.checked = res.checked ? '1' : '0';
         btn.classList.toggle('checked-by-me', res.checked);
         btn.querySelector('.check-count').textContent = res.check_count > 0 ? ' ' + res.check_count : '';
+      } catch {
+        toast('Lỗi', 'error');
+      }
+    });
+  });
+}
+
+function bindReactionBtns(container) {
+  container.querySelectorAll('.reaction-btn:not([data-bound])').forEach(btn => {
+    btn.dataset.bound = '1';
+    btn.addEventListener('click', async e => {
+      e.stopPropagation();
+      const reportId = Number(btn.dataset.id);
+      const reaction = btn.dataset.reaction;
+      try {
+        const res = await api('POST', `/reports/${reportId}/react`, { reaction });
+        // Update all reaction buttons for this report card
+        const card = btn.closest('.report-card');
+        if (!card) return;
+        card.querySelectorAll('.reaction-btn').forEach(b => {
+          const key = b.dataset.reaction;
+          b.classList.toggle('active', res.reaction === key);
+          const count = res.counts[key] || 0;
+          b.querySelector('.reaction-count').textContent = count > 0 ? count : '';
+        });
       } catch {
         toast('Lỗi', 'error');
       }
@@ -298,6 +342,7 @@ async function checkAwayLogic() {
   const awayList = document.getElementById('away-list');
   awayList.innerHTML = reports.map(r => reportCard(r)).join('');
   bindCheckBtns(awayList);
+  bindReactionBtns(awayList);
   document.getElementById('away-overlay').classList.remove('hidden');
 }
 
@@ -343,6 +388,7 @@ async function loadFeed() {
   setUnread(reports.length);
   bindCardRead(list);
   bindCheckBtns(list);
+  bindReactionBtns(list);
 }
 
 function setUnread(n) {
@@ -366,6 +412,7 @@ async function loadActivity() {
   empty.classList.add('hidden');
   list.innerHTML = reports.map(r => reportCard(r)).join('');
   bindCheckBtns(list);
+  bindReactionBtns(list);
 }
 
 // ── History ───────────────────────────────────────────────────────────────────
@@ -395,6 +442,7 @@ async function loadHistory() {
   }
   list.innerHTML = html;
   bindCheckBtns(list);
+  bindReactionBtns(list);
 }
 
 // ── Send report ───────────────────────────────────────────────────────────────
@@ -483,6 +531,7 @@ function connectWS() {
     try {
       const msg = JSON.parse(e.data);
       if (msg.type === 'check') onCheckUpdate(msg);
+      else if (msg.type === 'reaction') onReactionUpdate(msg);
       else onNewReport(msg);
     } catch {}
   };
@@ -504,6 +553,7 @@ function onNewReport(r) {
     list.insertAdjacentHTML('afterbegin', reportCard(r, { unread: true }));
     bindCardRead(list);
     bindCheckBtns(list);
+    bindReactionBtns(list);
   }
 }
 
@@ -515,6 +565,15 @@ function onCheckUpdate({ report_id, check_count, user_id }) {
     .forEach(el => { el.textContent = countText; });
   document.querySelectorAll(`.report-card[data-id="${report_id}"] .check-indicator`)
     .forEach(el => { el.textContent = check_count > 0 ? '✓ ' + check_count : ''; });
+}
+
+function onReactionUpdate({ report_id, user_id, counts }) {
+  // Skip echo of own action — UI already updated by API response
+  if (user_id === state.user?.id) return;
+  document.querySelectorAll(`.report-card[data-id="${report_id}"] .reaction-btn`).forEach(btn => {
+    const count = counts[btn.dataset.reaction] || 0;
+    btn.querySelector('.reaction-count').textContent = count > 0 ? count : '';
+  });
 }
 
 // ── Settings ──────────────────────────────────────────────────────────────────

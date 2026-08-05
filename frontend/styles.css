@@ -409,13 +409,49 @@ input, textarea { font-family: inherit; font-size: inherit; outline: none; }
   min-width: 0;
 }
 
-/* ── Check Button ─────────────────────────────────────────────────────────── */
+/* ── Card Footer ──────────────────────────────────────────────────────────── */
 .card-footer {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
   margin-top: 6px;
 }
 
+/* ── Reaction Bar ─────────────────────────────────────────────────────────── */
+.reaction-bar { display: flex; gap: 4px; }
+
+.reaction-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 7px;
+  border-radius: 12px;
+  font-size: 15px;
+  background: var(--bg-page);
+  border: 1.5px solid var(--border);
+  cursor: pointer;
+  line-height: 1.4;
+  transition: background 0.15s, border-color 0.15s, transform 0.1s;
+  user-select: none;
+}
+.reaction-btn:hover {
+  background: var(--accent-light);
+  border-color: var(--accent);
+  transform: scale(1.12);
+}
+.reaction-btn.active {
+  background: #EBF8FF;
+  border-color: #90CDF4;
+}
+.reaction-count {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-2);
+  line-height: 1;
+}
+.reaction-btn.active .reaction-count { color: var(--accent); }
+
+/* ── Check Button ─────────────────────────────────────────────────────────── */
 .check-btn {
   display: inline-flex;
   align-items: center;

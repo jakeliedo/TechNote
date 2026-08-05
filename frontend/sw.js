@@ -11,7 +11,7 @@ firebase.initializeApp({
 });
 const messaging = firebase.messaging();
 
-const CACHE = 'technote-v6';
+const CACHE = 'technote-v7';
 const PRECACHE = ['/manifest.json'];
 const CACHE_FIRST = ['/icons/', '/manifest'];
 

@@ -9,7 +9,7 @@ from sqlalchemy.orm import selectinload
 
 from server.auth import get_current_user
 from server.database import get_db
-from server.models import Report, ReportCheck, ReportRead, User
+from server.models import Report, ReportCheck, ReportRead, ReportReaction, User
 from server import fcm
 from server.ws import manager as ws_manager
 
@@ -40,11 +40,25 @@ class ReportOut(BaseModel):
     user: AuthorOut
     check_count: int = 0
     checked_by_me: bool = False
+    reactions: dict[str, int] = Field(default_factory=dict)
+    my_reaction: str | None = None
 
 
 class CheckResponse(BaseModel):
     checked: bool
     check_count: int
+
+
+VALID_REACTIONS = {'smile', 'surprise', 'question'}
+
+
+class ReactionCreate(BaseModel):
+    reaction: str
+
+
+class ReactionResponse(BaseModel):
+    reaction: str | None
+    counts: dict[str, int]
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -77,11 +91,30 @@ async def _enrich(reports: list[Report], db: AsyncSession, current_user_id: int)
     )).scalars().all()
     mine = set(my_rows)
 
+    # Reaction counts per (report_id, reaction)
+    rxn_rows = (await db.execute(
+        select(ReportReaction.report_id, ReportReaction.reaction, func.count().label("n"))
+        .where(ReportReaction.report_id.in_(ids))
+        .group_by(ReportReaction.report_id, ReportReaction.reaction)
+    )).all()
+    rxn_counts: dict[int, dict[str, int]] = {}
+    for row in rxn_rows:
+        rxn_counts.setdefault(row.report_id, {})[row.reaction] = row.n
+
+    # Current user's reaction per report
+    my_rxn_rows = (await db.execute(
+        select(ReportReaction.report_id, ReportReaction.reaction)
+        .where(ReportReaction.report_id.in_(ids), ReportReaction.user_id == current_user_id)
+    )).all()
+    my_rxns = {row.report_id: row.reaction for row in my_rxn_rows}
+
     result = []
     for r in reports:
         out = ReportOut.model_validate(r)
         out.check_count = counts.get(r.id, 0)
         out.checked_by_me = r.id in mine
+        out.reactions = rxn_counts.get(r.id, {})
+        out.my_reaction = my_rxns.get(r.id)
         result.append(out)
     return result
 
@@ -228,3 +261,56 @@ async def toggle_check(
     })
 
     return CheckResponse(checked=checked, check_count=check_count)
+
+
+@router.post("/reports/{report_id}/react", response_model=ReactionResponse)
+async def toggle_reaction(
+    report_id: int,
+    body: ReactionCreate,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if body.reaction not in VALID_REACTIONS:
+        raise HTTPException(status_code=422, detail="Invalid reaction")
+
+    result = await db.execute(select(Report).where(Report.id == report_id))
+    if result.scalar_one_or_none() is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found")
+
+    row = (await db.execute(
+        select(ReportReaction).where(
+            ReportReaction.report_id == report_id,
+            ReportReaction.user_id == current_user.id,
+        )
+    )).scalar_one_or_none()
+
+    if row and row.reaction == body.reaction:
+        await db.delete(row)
+        new_reaction = None
+    elif row:
+        row.reaction = body.reaction
+        new_reaction = body.reaction
+    else:
+        db.add(ReportReaction(report_id=report_id, user_id=current_user.id, reaction=body.reaction))
+        new_reaction = body.reaction
+    await db.commit()
+
+    cnt_rows = (await db.execute(
+        select(ReportReaction.reaction, func.count().label("n"))
+        .where(ReportReaction.report_id == report_id)
+        .group_by(ReportReaction.reaction)
+    )).all()
+    counts = {k: 0 for k in VALID_REACTIONS}
+    for r in cnt_rows:
+        counts[r.reaction] = r.n
+
+    background_tasks.add_task(ws_manager.broadcast, {
+        "type": "reaction",
+        "report_id": report_id,
+        "user_id": current_user.id,
+        "reaction": new_reaction,
+        "counts": counts,
+    })
+
+    return ReactionResponse(reaction=new_reaction, counts=counts)

@@ -88,6 +88,23 @@ class ReportRead(Base):
     user: Mapped["User"] = relationship("User", back_populates="reads")
 
 
+class ReportReaction(Base):
+    __tablename__ = "report_reactions"
+    __table_args__ = (
+        Index("ix_report_reactions_user_id", "user_id"),
+    )
+
+    report_id: Mapped[int] = mapped_column(ForeignKey("reports.id"), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    reaction: Mapped[str] = mapped_column(Text, nullable=False)
+    reacted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    report: Mapped["Report"] = relationship("Report")
+    user: Mapped["User"] = relationship("User")
+
+
 class ReportCheck(Base):
     __tablename__ = "report_checks"
     __table_args__ = (
