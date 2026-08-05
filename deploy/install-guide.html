@@ -1,0 +1,523 @@
+<title>TechNote — Hướng dẫn cài đặt server</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  :root {
+    --bg:       #0D1117;
+    --bg-card:  #161B22;
+    --bg-code:  #1C2128;
+    --border:   #30363D;
+    --accent:   #58A6FF;
+    --green:    #3FB950;
+    --yellow:   #D29922;
+    --red:      #F85149;
+    --t1:       #E6EDF3;
+    --t2:       #8B949E;
+    --t3:       #484F58;
+    --r:        10px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--t1);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 15px;
+    line-height: 1.6;
+    padding: 16px;
+    max-width: 520px;
+    margin: 0 auto;
+  }
+
+  /* ── Header ── */
+  .header {
+    text-align: center;
+    padding: 24px 0 20px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 20px;
+  }
+  .header-logo {
+    font-size: 28px;
+    font-weight: 800;
+    color: var(--accent);
+    letter-spacing: -0.5px;
+  }
+  .header-sub {
+    font-size: 13px;
+    color: var(--t2);
+    margin-top: 4px;
+  }
+
+  /* ── Section ── */
+  .section {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    padding: 16px;
+    margin-bottom: 14px;
+  }
+
+  .section-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .step-num {
+    width: 28px; height: 28px;
+    background: var(--accent);
+    color: #fff;
+    border-radius: 50%;
+    font-size: 13px;
+    font-weight: 800;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .step-num.green  { background: var(--green); }
+  .step-num.yellow { background: var(--yellow); }
+  .step-label {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--t1);
+  }
+
+  /* ── Checklist ── */
+  .checklist { list-style: none; }
+  .checklist li {
+    padding: 5px 0;
+    color: var(--t1);
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    border-bottom: 1px solid var(--border);
+    font-size: 14px;
+  }
+  .checklist li:last-child { border-bottom: none; }
+  .checklist li::before {
+    content: '☐';
+    color: var(--t2);
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  /* ── Steps ── */
+  .steps { list-style: none; counter-reset: step; }
+  .steps li {
+    counter-increment: step;
+    padding: 6px 0 6px 28px;
+    position: relative;
+    color: var(--t1);
+    font-size: 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .steps li:last-child { border-bottom: none; }
+  .steps li::before {
+    content: counter(step);
+    position: absolute;
+    left: 0; top: 7px;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--accent);
+    background: #1C2B3A;
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    text-align: center;
+    line-height: 18px;
+  }
+
+  /* ── Code ── */
+  code {
+    font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+    background: var(--bg-code);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 2px 6px;
+    font-size: 12px;
+    color: #79C0FF;
+    word-break: break-all;
+  }
+  pre {
+    background: var(--bg-code);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    margin-top: 10px;
+    font-family: 'SFMono-Regular', Consolas, monospace;
+    font-size: 12px;
+    color: #79C0FF;
+    overflow-x: auto;
+    line-height: 1.7;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+
+  /* ── Table ── */
+  .info-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+    font-size: 13px;
+  }
+  .info-table th {
+    text-align: left;
+    padding: 7px 10px;
+    background: #1C2B3A;
+    color: var(--accent);
+    font-size: 12px;
+    font-weight: 700;
+    border-bottom: 1px solid var(--border);
+  }
+  .info-table td {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+    color: var(--t1);
+  }
+  .info-table tr:last-child td { border-bottom: none; }
+  .info-table td:first-child {
+    color: var(--green);
+    font-family: monospace;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  /* ── Alert ── */
+  .alert {
+    display: flex;
+    gap: 10px;
+    padding: 12px;
+    border-radius: 8px;
+    margin-top: 10px;
+    font-size: 13px;
+    align-items: flex-start;
+  }
+  .alert-warn {
+    background: #2D2000;
+    border: 1px solid #5C3D00;
+    color: #FFC107;
+  }
+  .alert-info {
+    background: #001B30;
+    border: 1px solid #003D70;
+    color: #58A6FF;
+  }
+  .alert-ok {
+    background: #002200;
+    border: 1px solid #1A4A1A;
+    color: var(--green);
+  }
+  .alert-icon { font-size: 16px; flex-shrink: 0; }
+
+  /* ── Tag ── */
+  .tag {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 20px;
+    margin-left: 6px;
+    vertical-align: middle;
+  }
+  .tag-blue  { background: #1C3A5E; color: #58A6FF; }
+  .tag-green { background: #1A3A1A; color: #3FB950; }
+  .tag-gray  { background: #2A2F35; color: #8B949E; }
+
+  p { margin-bottom: 8px; color: var(--t1); font-size: 14px; }
+  p:last-child { margin-bottom: 0; }
+
+  .divider {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 8px 0;
+  }
+
+  .service-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+  .service-row:last-child { border-bottom: none; }
+  .service-name { font-weight: 700; color: var(--t1); }
+  .service-desc { color: var(--t2); font-size: 12px; }
+  .dot-green {
+    width: 8px; height: 8px;
+    background: var(--green);
+    border-radius: 50%;
+    flex-shrink: 0;
+    box-shadow: 0 0 6px var(--green);
+  }
+
+  .footer {
+    text-align: center;
+    padding: 20px 0 8px;
+    color: var(--t3);
+    font-size: 12px;
+  }
+
+  /* ── Answer blocks ── */
+  .answer-block {
+    background: var(--bg-code);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    margin-top: 10px;
+  }
+  .answer-q {
+    font-size: 12px;
+    color: var(--t2);
+    margin-bottom: 6px;
+  }
+  .answer-hint {
+    font-size: 13px;
+    color: var(--t1);
+    margin-bottom: 6px;
+  }
+  kbd {
+    background: #2D333B;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 12px;
+    color: var(--accent);
+    font-family: monospace;
+  }
+  .answer-val {
+    font-family: 'SFMono-Regular', Consolas, monospace;
+    font-size: 11px;
+    color: #3FB950;
+    background: #001A00;
+    border: 1px dashed #1A4A1A;
+    border-radius: 6px;
+    padding: 10px;
+    word-break: break-all;
+    cursor: pointer;
+    position: relative;
+    line-height: 1.6;
+    transition: background 0.2s;
+  }
+  .answer-val:active { background: #002A00; }
+  .copy-hint {
+    display: block;
+    font-size: 10px;
+    color: var(--t3);
+    font-family: sans-serif;
+    margin-top: 4px;
+    text-align: right;
+  }
+  .answer-val.copied {
+    background: #002A00;
+    border-color: var(--green);
+    color: var(--green);
+  }
+</style>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="header-logo">⚙️ TechNote</div>
+  <div class="header-sub">Hướng dẫn cài đặt Server — Club V e-Gaming</div>
+</div>
+
+<!-- BƯỚC 0: Chuẩn bị -->
+<div class="section">
+  <div class="section-title">
+    <div class="step-num yellow">!</div>
+    <div class="step-label">Chuẩn bị trước khi bắt đầu</div>
+  </div>
+  <ul class="checklist">
+    <li><span><strong>technote-deploy.zip</strong> — copy từ máy cũ sang USB hoặc mạng nội bộ</span></li>
+    <li><span><strong>firebase-service-account.json</strong> — trong thư mục <code>server\</code> của máy cũ</span></li>
+    <li><span><strong>ngrok authtoken</strong> — đăng nhập <code>dashboard.ngrok.com</code> → Your Authtoken</span></li>
+    <li><span><strong>VAPID public key</strong> — Firebase Console → Project Settings → Cloud Messaging → Web Push certificates</span></li>
+    <li><span>Tắt ngrok trên máy cũ trước khi dùng máy mới <span class="tag tag-blue">quan trọng</span></span></li>
+  </ul>
+</div>
+
+<!-- BƯỚC 1: Giải nén -->
+<div class="section">
+  <div class="section-title">
+    <div class="step-num">1</div>
+    <div class="step-label">Giải nén project</div>
+  </div>
+  <ol class="steps">
+    <li>Copy <code>technote-deploy.zip</code> vào ổ <code>C:\</code> của máy mới</li>
+    <li>Click phải vào file ZIP → <strong>Extract All…</strong> → giải nén vào <code>C:\TechNote</code></li>
+    <li>Copy <code>firebase-service-account.json</code> vào đúng vị trí:<br><code>C:\TechNote\server\firebase-service-account.json</code></li>
+  </ol>
+  <div class="alert alert-ok" style="margin-top:12px">
+    <div class="alert-icon">✓</div>
+    <div>Kết quả đúng: thư mục <code>C:\TechNote\</code> chứa các thư mục <code>server\</code>, <code>frontend\</code>, <code>deploy\</code></div>
+  </div>
+</div>
+
+<!-- BƯỚC 2: Chạy install.bat -->
+<div class="section">
+  <div class="section-title">
+    <div class="step-num">2</div>
+    <div class="step-label">Chạy install.bat</div>
+  </div>
+  <ol class="steps">
+    <li>Mở <strong>File Explorer</strong>, vào <code>C:\TechNote\deploy\</code></li>
+    <li>Click phải vào <code>install.bat</code></li>
+    <li>Chọn <strong>"Run as administrator"</strong></li>
+    <li>Cửa sổ đen hiện ra — làm theo hướng dẫn bên dưới</li>
+  </ol>
+
+  <hr class="divider">
+
+  <p style="color:var(--t2); font-size:13px; margin-top:8px">Script sẽ hỏi 4 thông tin — nhập lần lượt:</p>
+
+  <!-- Q1 -->
+  <div class="answer-block">
+    <div class="answer-q">1. <code>ngrok authtoken:</code></div>
+    <div class="answer-hint">Copy chuỗi dưới đây, dán vào rồi Enter:</div>
+    <div class="answer-hint" style="color:var(--yellow)">⚠ Lấy tại: <strong>dashboard.ngrok.com → Your Authtoken</strong> → copy chuỗi dài rồi dán vào</div>
+  </div>
+
+  <!-- Q2 -->
+  <div class="answer-block">
+    <div class="answer-q">2. <code>ngrok static domain [snugly-gory-goofiness.ngrok-free.dev]:</code></div>
+    <div class="answer-hint">Nhấn <kbd>Enter</kbd> — giữ nguyên domain cũ, không cần gõ gì</div>
+  </div>
+
+  <!-- Q3 -->
+  <div class="answer-block">
+    <div class="answer-q">3. <code>Firebase project ID [technote-clubv]:</code></div>
+    <div class="answer-hint">Nhấn <kbd>Enter</kbd> — giữ nguyên, không cần gõ gì</div>
+  </div>
+
+  <!-- Q4 -->
+  <div class="answer-block">
+    <div class="answer-q">4. <code>VAPID public key:</code></div>
+    <div class="answer-hint">Copy chuỗi dưới đây, dán vào rồi Enter:</div>
+    <div class="answer-val" onclick="copyVal(this)" title="Nhấn để copy">BCk3cOcmho0XKti6ziGtw0RXt23OTEOTy8tIBRleIYXBFFlgZUtalK8mAymWsPtfN9djJjaCSxxk3LRNZ2d_H4k<span class="copy-hint">nhấn để copy</span></div>
+  </div>
+</div>
+
+<!-- BƯỚC 3: Nếu Docker chưa có -->
+<div class="section">
+  <div class="section-title">
+    <div class="step-num yellow">!</div>
+    <div class="step-label">Nếu Docker chưa được cài</div>
+  </div>
+  <p style="color:var(--t2); font-size:13px">Script sẽ tự cài Docker Desktop rồi dừng lại và báo:</p>
+  <ol class="steps">
+    <li><strong>Khởi động lại máy tính</strong></li>
+    <li>Sau khi vào Windows: mở <strong>Docker Desktop</strong>, đồng ý license</li>
+    <li>Đợi icon Docker <span style="color:var(--accent)">🐳</span> xuất hiện ở góc dưới phải taskbar</li>
+    <li>Vào lại <code>C:\TechNote\deploy\</code> → click phải <code>install.bat</code> → Run as administrator</li>
+  </ol>
+  <div class="alert alert-warn">
+    <div class="alert-icon">⚠</div>
+    <div>Không chạy lại install.bat trước khi Docker Desktop hiện icon trên taskbar — sẽ báo lỗi</div>
+  </div>
+</div>
+
+<!-- KẾT QUẢ -->
+<div class="section">
+  <div class="section-title">
+    <div class="step-num green">✓</div>
+    <div class="step-label">Cài đặt hoàn tất</div>
+  </div>
+
+  <p style="font-size:13px; color:var(--t2); margin-bottom:10px">Hai Windows Service tự chạy mỗi khi khởi động máy:</p>
+
+  <div class="service-row">
+    <div>
+      <div class="service-name">TechNote</div>
+      <div class="service-desc">FastAPI server — port 8000</div>
+    </div>
+    <div class="dot-green"></div>
+  </div>
+  <div class="service-row">
+    <div>
+      <div class="service-name">TechNote-ngrok</div>
+      <div class="service-desc">Tunnel ra internet</div>
+    </div>
+    <div class="dot-green"></div>
+  </div>
+
+  <hr class="divider" style="margin-top:12px">
+
+  <p style="margin-top:12px"><strong>Truy cập thử:</strong></p>
+  <pre>Local:   http://localhost:8000
+Public:  https://snugly-gory-goofiness.ngrok-free.dev</pre>
+</div>
+
+<!-- QUẢN LÝ -->
+<div class="section">
+  <div class="section-title">
+    <div class="step-num" style="background:#6E40C9">⚙</div>
+    <div class="step-label">Quản lý sau khi cài</div>
+  </div>
+
+  <p style="color:var(--t2); font-size:13px; margin-bottom:6px">Quản lý services (mở <code>services.msc</code> hoặc dùng lệnh):</p>
+  <pre>net stop TechNote
+net start TechNote
+net stop TechNote-ngrok
+net start TechNote-ngrok</pre>
+
+  <p style="color:var(--t2); font-size:13px; margin-top:12px; margin-bottom:6px">Xem log:</p>
+  <pre>C:\TechNote\logs\technote.log
+C:\TechNote\logs\ngrok.log</pre>
+
+  <p style="color:var(--t2); font-size:13px; margin-top:12px; margin-bottom:6px">Cập nhật phiên bản mới (sau khi có ZIP mới):</p>
+  <ol class="steps">
+    <li>Copy <code>technote-deploy.zip</code> vào <code>C:\</code> (cùng cấp với thư mục TechNote)</li>
+    <li>Click phải <code>C:\TechNote\deploy\update.bat</code> → Run as administrator</li>
+  </ol>
+</div>
+
+<!-- LƯU Ý QUAN TRỌNG -->
+<div class="section">
+  <div class="section-title">
+    <div class="step-num yellow">!</div>
+    <div class="step-label">Lưu ý quan trọng</div>
+  </div>
+  <div class="alert alert-warn">
+    <div class="alert-icon">⚠</div>
+    <div><strong>Máy cũ phải tắt ngrok trước</strong> khi máy mới chạy — một static domain chỉ hoạt động trên 1 máy cùng lúc. Nếu không tắt, ngrok trên máy mới sẽ không kết nối được.</div>
+  </div>
+  <div class="alert alert-info" style="margin-top:8px">
+    <div class="alert-icon">ℹ</div>
+    <div>Dữ liệu cũ (reports, users) lưu trong Docker volume. Nếu muốn chuyển dữ liệu, cần export DB từ máy cũ trước.</div>
+  </div>
+  <div class="alert alert-ok" style="margin-top:8px">
+    <div class="alert-icon">✓</div>
+    <div>PostgreSQL tự khởi động sau reboot nhờ Task Scheduler (delay 1 phút 30 giây để Docker kịp load).</div>
+  </div>
+</div>
+
+<div class="footer">
+  TechNote · Club V e-Gaming Technical Team<br>
+  snugly-gory-goofiness.ngrok-free.dev
+</div>
+
+<script>
+function copyVal(el) {
+  const hint = el.querySelector('.copy-hint');
+  const text = el.childNodes[0].textContent.trim();
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(text).then(() => {
+      el.classList.add('copied');
+      hint.textContent = '✓ Đã copy!';
+      setTimeout(() => {
+        el.classList.remove('copied');
+        hint.textContent = 'nhấn để copy';
+      }, 2000);
+    });
+  } else {
+    const r = document.createRange();
+    r.selectNode(el.childNodes[0]);
+    window.getSelection().removeAllRanges();
+    window.getSelection().addRange(r);
+    document.execCommand('copy');
+    window.getSelection().removeAllRanges();
+    hint.textContent = '✓ Đã copy!';
+    setTimeout(() => { hint.textContent = 'nhấn để copy'; }, 2000);
+  }
+}
+</script>

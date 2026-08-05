@@ -1,7 +1,9 @@
+import os
+import shutil
 import uuid as uuid_lib
 from datetime import datetime
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,6 +14,10 @@ from server.database import get_db
 from server.models import Report, ReportCheck, ReportRead, ReportReaction, User
 from server import fcm
 from server.ws import manager as ws_manager
+
+MEDIA_DIR = "media"
+ALLOWED_EXTS = {'.jpg', '.jpeg', '.png', '.webp', '.gif'}
+MAX_IMAGE_BYTES = 3 * 1024 * 1024  # 3 MB server-side (frontend targets 2 MB)
 
 router = APIRouter()
 
@@ -42,6 +48,7 @@ class ReportOut(BaseModel):
     checked_by_me: bool = False
     reactions: dict[str, int] = Field(default_factory=dict)
     my_reaction: str | None = None
+    image_url: str | None = None
 
 
 class CheckResponse(BaseModel):
@@ -115,6 +122,7 @@ async def _enrich(reports: list[Report], db: AsyncSession, current_user_id: int)
         out.checked_by_me = r.id in mine
         out.reactions = rxn_counts.get(r.id, {})
         out.my_reaction = my_rxns.get(r.id)
+        out.image_url = f"/media/{r.image_path}" if r.image_path else None
         result.append(out)
     return result
 
@@ -123,39 +131,69 @@ async def _enrich(reports: list[Report], db: AsyncSession, current_user_id: int)
 
 @router.post("/reports", response_model=ReportOut, status_code=status.HTTP_201_CREATED)
 async def create_report(
-    body: ReportCreate,
     background_tasks: BackgroundTasks,
+    body: str = Form(..., min_length=1),
+    client_uuid: str | None = Form(None),
+    image: UploadFile | None = File(None),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    parsed_uuid: uuid_lib.UUID | None = None
+    if client_uuid:
+        try:
+            parsed_uuid = uuid_lib.UUID(client_uuid)
+        except ValueError:
+            pass
+
     # Idempotent retry: return existing report if client_uuid already seen
-    if body.client_uuid:
+    if parsed_uuid:
         result = await db.execute(
             select(Report)
             .options(selectinload(Report.user))
-            .where(Report.client_uuid == body.client_uuid)
+            .where(Report.client_uuid == parsed_uuid)
         )
         existing = result.scalar_one_or_none()
         if existing:
-            return existing
+            enriched = await _enrich([existing], db, current_user.id)
+            return enriched[0]
 
-    report = Report(user_id=current_user.id, body=body.body.strip(), client_uuid=body.client_uuid)
+    # Save image if provided
+    image_path: str | None = None
+    if image and image.filename:
+        content = await image.read()
+        if len(content) <= MAX_IMAGE_BYTES:
+            ext = os.path.splitext(image.filename)[1].lower()
+            if ext not in ALLOWED_EXTS:
+                ext = '.jpg'
+            filename = f"{uuid_lib.uuid4()}{ext}"
+            os.makedirs(MEDIA_DIR, exist_ok=True)
+            with open(os.path.join(MEDIA_DIR, filename), 'wb') as f:
+                f.write(content)
+            image_path = filename
+
+    body_text = body.strip()
+    report = Report(
+        user_id=current_user.id,
+        body=body_text,
+        client_uuid=parsed_uuid,
+        image_path=image_path,
+    )
     db.add(report)
     await db.commit()
 
     report = await _load_report(db, report.id)
-    report_data = ReportOut.model_validate(report).model_dump(mode="json")
+    enriched = await _enrich([report], db, current_user.id)
+    report_data = enriched[0].model_dump(mode="json")
 
-    # Run FCM + WebSocket in background so they never block the response
     background_tasks.add_task(
         fcm.broadcast,
         exclude_user_id=current_user.id,
         sender=current_user.display_name,
-        body=body.body.strip(),
+        body=body_text,
     )
     background_tasks.add_task(ws_manager.broadcast, report_data)
 
-    return report
+    return enriched[0]
 
 
 @router.get("/reports", response_model=list[ReportOut])
@@ -195,7 +233,7 @@ async def unread_reports(
         select(Report)
         .options(selectinload(Report.user))
         .where(Report.id.not_in(already_read))
-        .order_by(Report.created_at.asc())
+        .order_by(Report.created_at.desc())
     )
     reports = (await db.execute(q)).scalars().all()
     return await _enrich(list(reports), db, current_user.id)

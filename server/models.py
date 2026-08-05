@@ -66,6 +66,7 @@ class Report(Base):
     client_uuid: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), unique=True, nullable=True
     )
+    image_path: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     user: Mapped["User"] = relationship("User", back_populates="reports")
     reads: Mapped[list["ReportRead"]] = relationship("ReportRead", back_populates="report")

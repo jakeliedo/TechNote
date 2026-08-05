@@ -9,10 +9,13 @@ Real-time internal report logging PWA for technical teams. Staff submit instant 
 ## Features
 
 - **Instant reporting** — type a note, tap Send, delivered to everyone in real-time
+- **Image attachment** — 1 image per note; auto-resized to ≤2MB JPEG on device; thumbnail in card, tap to open full lightbox
 - **Push notifications** — FCM push when app is closed (iOS 16.4+ PWA, Android, desktop)
-- **WebSocket live feed** — real-time updates when app is open
-- **Offline queue** — notes saved locally and auto-synced on reconnect
+- **WebSocket live feed** — real-time updates when app is open; feed sorted newest first
+- **Offline queue** — text notes saved locally and auto-synced on reconnect
 - **Away log** — reopening after 2h shows a summary of missed reports
+- **Seen indicator** — tap a note (or its image) to mark as seen; sender sees live ✓ count; always visible even at 0
+- **Emoji reactions** — long-press 😊 button to pick smile / surprise / question; compact badge shown on card
 - **Single-session login** — new login automatically invalidates previous session
 - **Single-device lock** — a device stays bound to one user account (prevents sharing)
 - **Auto badge color** — each user gets a unique color on login (20 options: solid + gradient); color picker blocks already-taken colors
@@ -58,7 +61,12 @@ technote/
 │   └── icons/
 │       ├── icon-192.png
 │       └── icon-512.png
+├── media/                   # uploaded images (auto-created, excluded from git)
 ├── tests/                   # pytest — 45 tests
+├── deploy/
+│   ├── package.ps1          # build deployment ZIP
+│   ├── install.bat          # first-time server setup
+│   └── update.bat           # update running server
 ├── docker-compose.yml       # PostgreSQL
 ├── Dockerfile
 ├── requirements.txt
@@ -76,12 +84,14 @@ PUT  /users/me            update display_name suffix + badge_color
 GET  /users               list all active users with badge colors
 POST /devices/register    register FCM token
 
-POST /reports             create report (FCM + WebSocket broadcast)
+POST /reports             create report — multipart/form-data: body + client_uuid + image (optional)
 GET  /reports             history — ?from=&to=&limit=&offset=&mine=
-GET  /reports/unread      unread reports for current user
+GET  /reports/unread      unread reports (newest first)
 POST /reports/{id}/read   mark as read
+POST /reports/{id}/check  toggle "seen" (cannot check own); real-time ✓ count via WebSocket
+POST /reports/{id}/react  toggle emoji reaction (smile/surprise/question)
 
-WS   /ws?token=<jwt>      real-time push to connected clients
+WS   /ws?token=<jwt>      real-time push — message types: report, check, reaction
 ```
 
 ---
@@ -89,16 +99,19 @@ WS   /ws?token=<jwt>      real-time push to connected clients
 ## Database Schema
 
 ```sql
-users        (id, display_name, username, email, phone, password_hash, is_active, badge_color, token_version)
-devices      (id, user_id, platform, fcm_token, last_seen)
-reports      (id, user_id, body, created_at, client_uuid)
-report_reads (report_id, user_id, read_at)
+users            (id, display_name, username, email, phone, password_hash, is_active, badge_color, token_version)
+devices          (id, user_id, platform, fcm_token, last_seen)
+reports          (id, user_id, body, created_at, client_uuid, image_path)
+report_reads     (report_id, user_id, read_at)
+report_checks    (report_id, user_id, checked_at)   -- "seen" tracking
+report_reactions (report_id, user_id, reaction)     -- emoji: smile/surprise/question
 ```
 
 - `username` — fixed login name (immutable); `display_name` = `username` or `username | suffix`
 - `client_uuid` — deduplication on retry
 - `token_version` — single-session enforcement (new login invalidates old JWT)
 - `badge_color` — hex or CSS `linear-gradient(...)`, auto-assigned unique per user
+- `image_path` — filename in `media/` dir; served at `/media/<filename>`
 - Timezone: stored UTC, displayed in Asia/Ho_Chi_Minh
 
 ---

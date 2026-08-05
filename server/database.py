@@ -48,3 +48,6 @@ async def run_migrations() -> None:
         await conn.execute(text(
             "CREATE UNIQUE INDEX IF NOT EXISTS ix_users_username ON users(username)"
         ))
+        await conn.execute(text(
+            "ALTER TABLE reports ADD COLUMN IF NOT EXISTS image_path TEXT"
+        ))

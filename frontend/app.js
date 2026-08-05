@@ -83,10 +83,12 @@ const state = {
 
 // ── API helper ────────────────────────────────────────────────────────────────
 async function api(method, path, body = null, signal = null) {
-  const headers = { 'Content-Type': 'application/json' };
+  const headers = {};
   if (state.token) headers['Authorization'] = `Bearer ${state.token}`;
+  // Don't set Content-Type for FormData — browser sets it with correct multipart boundary
+  if (body && !(body instanceof FormData)) headers['Content-Type'] = 'application/json';
   const opts = { method, headers };
-  if (body) opts.body = JSON.stringify(body);
+  if (body) opts.body = body instanceof FormData ? body : JSON.stringify(body);
   if (signal) opts.signal = signal;
   const res = await fetch(path, opts);
   if (res.status === 401) { if (!path.startsWith('/auth')) logout(); throw new Error('401'); }
@@ -111,10 +113,17 @@ function esc(str) {
   return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
+const MONTH_SHORT = ['Th1','Th2','Th3','Th4','Th5','Th6','Th7','Th8','Th9','Th10','Th11','Th12'];
+
 function fmtTime(iso) {
-  return new Date(iso).toLocaleTimeString('vi-VN', {
-    hour: '2-digit', minute: '2-digit', timeZone: TZ,
-  });
+  const d = new Date(iso);
+  const p = {};
+  new Intl.DateTimeFormat('vi-VN', {
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit',
+    timeZone: TZ, hour12: false,
+  }).formatToParts(d).forEach(({ type, value }) => { p[type] = value; });
+  return `${p.day} ${MONTH_SHORT[Number(p.month) - 1]} ${p.year} ${p.hour}:${p.minute}`;
 }
 
 function ordinal(n) {
@@ -143,6 +152,81 @@ function dateKey(iso) {
   });
 }
 
+// ── Image resize (client-side, targets 2 MB JPEG) ────────────────────────────
+function resizeImageToBlob(file, maxBytes = 2 * 1024 * 1024) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const MAX_DIM = 1920;
+      let { width, height } = img;
+      if (width > MAX_DIM || height > MAX_DIM) {
+        const ratio = Math.min(MAX_DIM / width, MAX_DIM / height);
+        width = Math.round(width * ratio);
+        height = Math.round(height * ratio);
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width; canvas.height = height;
+      canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+      let quality = 0.92;
+      const compress = () => {
+        canvas.toBlob(blob => {
+          if (!blob) { reject(new Error('toBlob failed')); return; }
+          if (blob.size <= maxBytes || quality <= 0.30) { resolve(blob); }
+          else { quality -= 0.08; compress(); }
+        }, 'image/jpeg', quality);
+      };
+      compress();
+    };
+    img.onerror = reject;
+    img.src = url;
+  });
+}
+
+// ── Lightbox ─────────────────────────────────────────────────────────────────
+function openLightbox(url) {
+  const lb = document.createElement('div');
+  lb.className = 'lightbox';
+  lb.innerHTML = `<img src="${url}" alt="ảnh"><button class="lightbox-close" aria-label="Đóng">✕</button>`;
+  lb.addEventListener('click', e => {
+    if (e.target === lb || e.target.closest('.lightbox-close')) lb.remove();
+  });
+  document.body.appendChild(lb);
+}
+
+// ── Lazy image loading ────────────────────────────────────────────────────────
+const _lazyObserver = new IntersectionObserver(entries => {
+  entries.forEach(entry => {
+    if (!entry.isIntersecting) return;
+    const img = entry.target;
+    if (img.dataset.src) { img.src = img.dataset.src; delete img.dataset.src; }
+    _lazyObserver.unobserve(img);
+  });
+}, { rootMargin: '120px' });
+
+function bindLazyImages(container) {
+  container.querySelectorAll('img[data-src]').forEach(img => _lazyObserver.observe(img));
+}
+
+function bindCardImages(container) {
+  container.querySelectorAll('.card-image[data-url]').forEach(wrap => {
+    wrap.addEventListener('click', e => {
+      e.stopPropagation();
+      openLightbox(wrap.dataset.url);
+      // Trigger read + auto-seen when opening an image from an unread feed card (iOS-safe)
+      const card = wrap.closest('.report-card.unread');
+      if (card) {
+        const reportId = Number(card.dataset.id);
+        api('POST', `/reports/${reportId}/read`).catch(() => {});
+        card.classList.remove('unread');
+        setUnread(document.querySelectorAll('#feed-list .report-card.unread').length);
+        autoSeenNote(reportId, card.querySelector('.check-btn'));
+      }
+    });
+  });
+}
+
 // ── Report Card ───────────────────────────────────────────────────────────────
 function rxnBadgesHtml(reportId, reactions, myReaction) {
   return REACTIONS
@@ -163,11 +247,17 @@ function reportCard(r, { unread = false } = {}) {
   const myRxn = r.my_reaction || null;
 
   const checkPartHtml = isOwn
-    ? `<span class="check-indicator">${checkCount > 0 ? '✓ ' + checkCount : ''}</span>`
+    ? `<span class="check-indicator seen-count-${checkCount > 0 ? 'active' : 'zero'}">✓ ${checkCount}</span>`
     : `<button class="check-btn${checkedByMe ? ' checked-by-me' : ''}"
                data-id="${r.id}" data-checked="${checkedByMe ? '1' : '0'}" title="Noted">
          ✓<span class="check-count">${checkCount > 0 ? ' ' + checkCount : ''}</span>
        </button>`;
+
+  const imgHtml = r.image_url
+    ? `<div class="card-image" data-url="${r.image_url}" data-report-id="${r.id}">
+         <img data-src="${r.image_url}" alt="ảnh đính kèm">
+       </div>`
+    : '';
 
   return `
     <div class="report-card${unread ? ' unread' : ''}" data-id="${r.id}">
@@ -179,6 +269,7 @@ function reportCard(r, { unread = false } = {}) {
         <span class="card-time">${fmtTime(r.created_at)}</span>
       </div>
       <div class="card-body">${esc(r.body)}</div>
+      ${imgHtml}
       <div class="card-footer">
         <div class="rxn-cluster" data-report-id="${r.id}" data-my-reaction="${myRxn || ''}">
           <div class="rxn-badges">${rxnBadgesHtml(r.id, rxns, myRxn)}</div>
@@ -200,6 +291,7 @@ function bindCardRead(container) {
       await api('POST', `/reports/${id}/read`).catch(() => {});
       card.classList.remove('unread');
       setUnread(document.querySelectorAll('#feed-list .report-card.unread').length);
+      autoSeenNote(id, card.querySelector('.check-btn'));
     });
   });
 }
@@ -219,6 +311,20 @@ function bindCheckBtns(container) {
         toast('Lỗi', 'error');
       }
     });
+  });
+}
+
+// Auto-seen: mark a note as seen (check) without toggling off if already checked.
+// Uses optimistic data-checked='1' lock to prevent duplicate API calls.
+function autoSeenNote(reportId, btn) {
+  if (!btn || btn.dataset.checked !== '0') return;
+  btn.dataset.checked = '1'; // optimistic — blocks any concurrent call
+  btn.classList.add('checked-by-me');
+  api('POST', `/reports/${reportId}/check`).then(res => {
+    if (res) btn.querySelector('.check-count').textContent = res.check_count > 0 ? ' ' + res.check_count : '';
+  }).catch(() => {
+    btn.dataset.checked = '0';
+    btn.classList.remove('checked-by-me');
   });
 }
 
@@ -302,7 +408,7 @@ function _attachLongPress(el, onLong) {
   el.addEventListener('mousedown',    start);
   el.addEventListener('mouseup',      cancel);
   el.addEventListener('mouseleave',   cancel);
-  el.addEventListener('contextmenu',  e => { if (fired) e.preventDefault(); });
+  el.addEventListener('contextmenu',  e => e.preventDefault());
 }
 
 function bindRxnBadge(badge) {
@@ -329,7 +435,7 @@ function bindRxnBadge(badge) {
   badge.addEventListener('mousedown',   start);
   badge.addEventListener('mouseup',     end);
   badge.addEventListener('mouseleave',  cancel);
-  badge.addEventListener('contextmenu', e => { if (longFired) e.preventDefault(); });
+  badge.addEventListener('contextmenu', e => e.preventDefault());
 }
 
 function bindRxnCluster(container) {
@@ -451,6 +557,8 @@ async function checkAwayLogic() {
   awayList.innerHTML = reports.map(r => reportCard(r)).join('');
   bindCheckBtns(awayList);
   bindRxnCluster(awayList);
+  bindLazyImages(awayList);
+  bindCardImages(awayList);
   document.getElementById('away-overlay').classList.remove('hidden');
 }
 
@@ -495,8 +603,13 @@ async function loadFeed() {
   list.innerHTML = reports.map(r => reportCard(r, { unread: true })).join('');
   setUnread(reports.length);
   bindCardRead(list);
-  bindCheckBtns(list);
   bindRxnCluster(list);
+  bindLazyImages(list);
+  bindCardImages(list);
+  // Auto-seen: all notes visible in feed are counted as seen (increments ✓ count for sender)
+  list.querySelectorAll('.check-btn[data-checked="0"]').forEach(btn => {
+    autoSeenNote(Number(btn.dataset.id), btn);
+  });
 }
 
 function setUnread(n) {
@@ -521,6 +634,8 @@ async function loadActivity() {
   list.innerHTML = reports.map(r => reportCard(r)).join('');
   bindCheckBtns(list);
   bindRxnCluster(list);
+  bindLazyImages(list);
+  bindCardImages(list);
 }
 
 // ── History ───────────────────────────────────────────────────────────────────
@@ -551,6 +666,53 @@ async function loadHistory() {
   list.innerHTML = html;
   bindCheckBtns(list);
   bindRxnCluster(list);
+  bindLazyImages(list);
+  bindCardImages(list);
+}
+
+// ── Image attachment state ────────────────────────────────────────────────────
+let _pendingBlob = null;
+let _pendingName = '';
+
+function _genUUID() {
+  return typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+        const r = Math.random() * 16 | 0;
+        return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+      });
+}
+
+function clearImage() {
+  _pendingBlob = null; _pendingName = '';
+  document.getElementById('img-preview-bar').classList.add('hidden');
+  document.getElementById('report-input').classList.remove('has-image');
+  document.getElementById('camera-btn').classList.remove('used');
+  document.getElementById('img-input').value = '';
+  const thumb = document.getElementById('img-preview-thumb');
+  if (thumb.src) { URL.revokeObjectURL(thumb.src); thumb.src = ''; }
+}
+
+async function handleImagePicked(file) {
+  if (!file) return;
+  const cameraBtn = document.getElementById('camera-btn');
+  cameraBtn.classList.add('used');
+  try {
+    const blob = await resizeImageToBlob(file);
+    _pendingBlob = blob;
+    _pendingName = file.name.replace(/\.[^.]+$/, '') + '.jpg';
+    const thumb = document.getElementById('img-preview-thumb');
+    const objUrl = URL.createObjectURL(blob);
+    thumb.src = objUrl;
+    document.getElementById('img-preview-name').textContent = _pendingName;
+    document.getElementById('img-preview-size').textContent =
+      (blob.size / (1024 * 1024)).toFixed(1) + ' MB';
+    document.getElementById('img-preview-bar').classList.remove('hidden');
+    document.getElementById('report-input').classList.add('has-image');
+  } catch {
+    cameraBtn.classList.remove('used');
+    toast('Không thể xử lý ảnh', 'error');
+  }
 }
 
 // ── Send report ───────────────────────────────────────────────────────────────
@@ -564,20 +726,21 @@ async function sendReport() {
   btn.innerHTML = '<span class="spinner"></span>';
 
   try {
-    const client_uuid = typeof crypto.randomUUID === 'function'
-      ? crypto.randomUUID()
-      : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
-          const r = Math.random() * 16 | 0;
-          return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
-        });
+    const client_uuid = _genUUID();
+    const fd = new FormData();
+    fd.append('body', text);
+    fd.append('client_uuid', client_uuid);
+    if (_pendingBlob) fd.append('image', _pendingBlob, _pendingName || 'image.jpg');
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
-    await api('POST', '/reports', { body: text, client_uuid }, controller.signal);
+    // Allow longer timeout when uploading an image
+    const timeout = setTimeout(() => controller.abort(), _pendingBlob ? 30000 : 15000);
+    await api('POST', '/reports', fd, controller.signal);
     clearTimeout(timeout);
 
     input.value = '';
     input.style.height = '';
+    clearImage();
     btn.textContent = '✓';
     btn.classList.add('btn-success');
     toast('✓ Đã gửi');
@@ -588,17 +751,16 @@ async function sendReport() {
     }, 1200);
   } catch (err) {
     const isOffline = !navigator.onLine || err?.name === 'AbortError';
-    if (isOffline) {
-      const client_uuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
-        const r = Math.random() * 16 | 0;
-        return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
-      });
+    if (isOffline && !_pendingBlob) {
+      // Text-only notes can be queued offline; images cannot
       const q = JSON.parse(localStorage.getItem('offline_queue') || '[]');
-      q.push({ body: text, client_uuid });
+      q.push({ body: text, client_uuid: _genUUID() });
       localStorage.setItem('offline_queue', JSON.stringify(q));
       input.value = '';
       input.style.height = '';
       toast('📡 Đã lưu — sẽ gửi khi có mạng', 'warning');
+    } else if (isOffline && _pendingBlob) {
+      toast('📡 Offline — không thể gửi ảnh', 'error');
     } else {
       toast(`✗ Lỗi: ${err?.message || err}`, 'error');
     }
@@ -614,7 +776,10 @@ async function processOfflineQueue() {
   const failed = [];
   for (const item of q) {
     try {
-      await api('POST', '/reports', { body: item.body, client_uuid: item.client_uuid });
+      const fd = new FormData();
+      fd.append('body', item.body);
+      fd.append('client_uuid', item.client_uuid);
+      await api('POST', '/reports', fd);
     } catch {
       failed.push(item);
     }
@@ -660,8 +825,10 @@ function onNewReport(r) {
     document.getElementById('mark-all-btn').classList.remove('hidden');
     list.insertAdjacentHTML('afterbegin', reportCard(r, { unread: true }));
     bindCardRead(list);
-    bindCheckBtns(list);
     bindRxnCluster(list);
+    bindLazyImages(list);
+    bindCardImages(list);
+    autoSeenNote(r.id, list.querySelector(`.report-card[data-id="${r.id}"] .check-btn`));
   }
 }
 
@@ -672,7 +839,11 @@ function onCheckUpdate({ report_id, check_count, user_id }) {
   document.querySelectorAll(`.report-card[data-id="${report_id}"] .check-btn .check-count`)
     .forEach(el => { el.textContent = countText; });
   document.querySelectorAll(`.report-card[data-id="${report_id}"] .check-indicator`)
-    .forEach(el => { el.textContent = check_count > 0 ? '✓ ' + check_count : ''; });
+    .forEach(el => {
+      el.textContent = '✓ ' + check_count;
+      el.classList.toggle('seen-count-active', check_count > 0);
+      el.classList.toggle('seen-count-zero', check_count === 0);
+    });
 }
 
 function onReactionUpdate({ report_id, user_id, counts }) {
@@ -789,6 +960,22 @@ document.getElementById('login-form').addEventListener('submit', async e => {
 });
 
 document.getElementById('send-btn').addEventListener('click', sendReport);
+
+// ── Camera / image attachment ─────────────────────────────────────────────────
+document.getElementById('camera-btn').addEventListener('click', () => {
+  if (_pendingBlob) return; // already has image
+  document.getElementById('img-input').click();
+});
+
+document.getElementById('img-input').addEventListener('change', e => {
+  const file = e.target.files?.[0];
+  if (file) handleImagePicked(file);
+});
+
+document.getElementById('img-clear-btn').addEventListener('click', e => {
+  e.stopPropagation();
+  clearImage();
+});
 
 document.getElementById('report-input').addEventListener('input', function () {
   this.style.height = 'auto';

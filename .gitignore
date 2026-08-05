@@ -1,6 +1,8 @@
 .env
 firebase-service-account.json
 server/firebase-service-account.json
+logs/
+media/
 __pycache__/
 *.pyc
 *.pyo

@@ -46,9 +46,33 @@
 
       <!-- Home -->
       <div id="tab-home" class="tab-screen">
-        <textarea id="report-input" class="report-textarea"
-                  placeholder="Nhập báo cáo tại đây..."></textarea>
+        <div class="textarea-wrap">
+          <textarea id="report-input" class="report-textarea"
+                    placeholder="Nhập báo cáo tại đây..."></textarea>
+          <div id="img-preview-bar" class="img-preview-bar hidden">
+            <div class="img-thumb-wrap">
+              <img id="img-preview-thumb" class="img-thumb" src="" alt="preview">
+              <button id="img-clear-btn" class="img-clear-btn" type="button">✕</button>
+            </div>
+            <div class="img-preview-meta">
+              <span id="img-preview-name" class="img-meta-name"></span>
+              <span id="img-preview-size" class="img-meta-size"></span>
+              <span class="img-ready-badge">✓ Sẵn sàng</span>
+            </div>
+          </div>
+        </div>
         <button id="send-btn" class="btn btn-primary btn-send">GỬI</button>
+        <div class="camera-area">
+          <input type="file" id="img-input" accept="image/*" style="display:none">
+          <button id="camera-btn" class="camera-btn" type="button" title="Đính kèm ảnh">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                 stroke-linecap="round" stroke-linejoin="round" width="26" height="26">
+              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+              <circle cx="12" cy="13" r="4"/>
+            </svg>
+          </button>
+          <span class="camera-hint">Đính kèm ảnh</span>
+        </div>
       </div>
 
       <!-- Feed -->

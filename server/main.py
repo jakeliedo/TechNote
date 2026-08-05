@@ -16,6 +16,7 @@ from server.ws import manager
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    os.makedirs("media", exist_ok=True)
     await create_tables()
     await run_migrations()
     yield
@@ -68,6 +69,10 @@ async def websocket_endpoint(ws: WebSocket, token: str = ""):
     finally:
         manager.disconnect(ws)
 
+
+# Serve uploaded images — must be before frontend catch-all
+os.makedirs("media", exist_ok=True)
+app.mount("/media", StaticFiles(directory="media"), name="media")
 
 # Serve PWA frontend — must be mounted last so API routes take precedence
 if os.path.isdir("frontend"):
