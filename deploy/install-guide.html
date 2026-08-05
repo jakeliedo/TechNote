@@ -329,10 +329,10 @@
   </div>
   <ul class="checklist">
     <li><span><strong>technote-deploy.zip</strong> — copy từ máy cũ sang USB hoặc mạng nội bộ</span></li>
-    <li><span><strong>firebase-service-account.json</strong> — trong thư mục <code>server\</code> của máy cũ</span></li>
-    <li><span><strong>ngrok authtoken</strong> — đăng nhập <code>dashboard.ngrok.com</code> → Your Authtoken</span></li>
-    <li><span><strong>VAPID public key</strong> — Firebase Console → Project Settings → Cloud Messaging → Web Push certificates</span></li>
-    <li><span>Tắt ngrok trên máy cũ trước khi dùng máy mới <span class="tag tag-blue">quan trọng</span></span></li>
+    <li><span><strong>firebase-service-account.json</strong> — lấy từ <code>C:\TechNote\server\</code> trên máy cũ</span></li>
+    <li><span><strong>ngrok authtoken</strong> — lấy từ file <code>C:\Users\ADMIN\AppData\Local\ngrok\ngrok.yml</code> trên máy cũ (xem hướng dẫn ở Bước 2)</span></li>
+    <li><span><strong>VAPID key</strong> — đã có sẵn trong hướng dẫn Bước 2, nhấn để copy</span></li>
+    <li><span>Tắt ngrok trên máy cũ trước khi khởi động máy mới <span class="tag tag-blue">quan trọng</span></span></li>
   </ul>
 </div>
 
@@ -373,8 +373,9 @@
   <!-- Q1 -->
   <div class="answer-block">
     <div class="answer-q">1. <code>ngrok authtoken:</code></div>
-    <div class="answer-hint">Copy chuỗi dưới đây, dán vào rồi Enter:</div>
-    <div class="answer-hint" style="color:var(--yellow)">⚠ Lấy tại: <strong>dashboard.ngrok.com → Your Authtoken</strong> → copy chuỗi dài rồi dán vào</div>
+    <div class="answer-hint">Mở file này trên máy cũ, copy giá trị sau chữ <code>authtoken:</code></div>
+    <div class="answer-val" onclick="copyVal(this)" title="Nhấn để copy">C:\Users\ADMIN\AppData\Local\ngrok\ngrok.yml<span class="copy-hint">nhấn để copy đường dẫn</span></div>
+    <div class="answer-hint" style="margin-top:8px; color:var(--t2)">Token có dạng: <code style="color:var(--green)">3HG9Jr...sBxCXjmb2</code> (chuỗi ~50 ký tự)</div>
   </div>
 
   <!-- Q2 -->
@@ -392,7 +393,7 @@
   <!-- Q4 -->
   <div class="answer-block">
     <div class="answer-q">4. <code>VAPID public key:</code></div>
-    <div class="answer-hint">Copy chuỗi dưới đây, dán vào rồi Enter:</div>
+    <div class="answer-hint">Nhấn vào ô xanh bên dưới để copy, rồi dán vào và Enter:</div>
     <div class="answer-val" onclick="copyVal(this)" title="Nhấn để copy">BCk3cOcmho0XKti6ziGtw0RXt23OTEOTy8tIBRleIYXBFFlgZUtalK8mAymWsPtfN9djJjaCSxxk3LRNZ2d_H4k<span class="copy-hint">nhấn để copy</span></div>
   </div>
 </div>
