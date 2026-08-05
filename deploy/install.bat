@@ -36,7 +36,35 @@ echo [OK] Project: %APP_DIR%
 if not exist "%APP_DIR%\logs" mkdir "%APP_DIR%\logs"
 
 :: ============================================================
-:: 3. Kiem tra / Cai dat Python 3.12
+:: 3. NHAP THONG TIN CAU HINH (hoi truoc, cai sau)
+:: ============================================================
+echo.
+echo  --- NHAP THONG TIN CAU HINH ---
+echo  (Lay authtoken trong file: C:\Users\ADMIN\AppData\Local\ngrok\ngrok.yml)
+echo  (Hoac tai: https://dashboard.ngrok.com/get-started/your-authtoken)
+echo.
+
+set /p "NGROK_TOKEN=  ngrok authtoken: "
+if "!NGROK_TOKEN!"=="" (
+    echo [FAIL] Authtoken khong duoc de trong.
+    pause
+    exit /b 1
+)
+
+set "NGROK_DOMAIN=snugly-gory-goofiness.ngrok-free.dev"
+set /p "NGROK_DOMAIN=  ngrok static domain [!NGROK_DOMAIN!]: "
+
+set "FCM_PROJECT=technote-clubv"
+set /p "FCM_PROJECT=  Firebase project ID [!FCM_PROJECT!]: "
+
+set "VAPID_KEY=BCk3cOcmho0XKti6ziGtw0RXt23OTEOTy8tIBRleIYXBFFlgZUtalK8mAymWsPtfN9djJjaCSxxk3LRNZ2d_H4k"
+set /p "VAPID_KEY=  VAPID public key [!VAPID_KEY!]: "
+
+echo.
+echo [OK] Thong tin da nhap xong. Bat dau cai dat...
+
+:: ============================================================
+:: 4. Kiem tra / Cai dat Python 3.12
 :: ============================================================
 echo.
 echo [*] Kiem tra Python 3.12...
@@ -135,38 +163,11 @@ if not exist "%DEPLOY_DIR%nssm.exe" (
 echo [OK] NSSM: %DEPLOY_DIR%nssm.exe
 
 :: ============================================================
-:: 7. Nhap thong tin cau hinh
+:: 7. Tao file .env
 :: ============================================================
-echo.
-echo  --- NHAP THONG TIN CAU HINH ---
-echo  (Lay authtoken tai: https://dashboard.ngrok.com/get-started/your-authtoken)
-echo.
-
-set /p "NGROK_TOKEN=  ngrok authtoken: "
-if "!NGROK_TOKEN!"=="" (
-    echo [FAIL] Authtoken khong duoc de trong.
-    pause
-    exit /b 1
-)
-
-set "NGROK_DOMAIN=snugly-gory-goofiness.ngrok-free.dev"
-set /p "NGROK_DOMAIN=  ngrok static domain [!NGROK_DOMAIN!]: "
-
-set "FCM_PROJECT=technote-clubv"
-set /p "FCM_PROJECT=  Firebase project ID [!FCM_PROJECT!]: "
-
-set /p "VAPID_KEY=  VAPID public key: "
-if "!VAPID_KEY!"=="" (
-    echo [!] CANH BAO: VAPID key trong — push notification se khong hoat dong.
-    echo     (Tim tai Firebase Console → Project Settings → Cloud Messaging → Web Push certificates)
-)
 
 :: Sinh JWT secret ngau nhien
 for /f "tokens=*" %%i in ('powershell -NoProfile -Command "[Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(48))"') do set "JWT_SECRET=%%i"
-
-:: ============================================================
-:: 8. Tao file .env
-:: ============================================================
 echo.
 echo [*] Tao file .env...
 (
