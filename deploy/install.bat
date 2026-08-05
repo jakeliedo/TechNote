@@ -86,10 +86,10 @@ for /f "tokens=2*" %%a in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Ses
 set "PATH=%SYSPATH%;%USERPATH%"
 py -3.12 --version >nul 2>&1
 if errorlevel 1 (
-    echo [!] Python da cai nhung chua co trong PATH.
-    echo     Dong cua so nay, mo lai voi quyen Admin, chay lai script.
-    pause
-    exit /b 1
+    echo [*] PATH chua cap nhat — tu dong chay lai script...
+    timeout /t 2 /nobreak >nul
+    powershell -NoProfile -Command "Start-Process '%~f0' -Verb RunAs"
+    exit /b
 )
 :python_ok
 for /f "tokens=*" %%i in ('py -3.12 --version') do echo [OK] %%i
@@ -149,13 +149,25 @@ echo [OK] ngrok: !NGROK_EXE!
 echo.
 echo [*] Kiem tra NSSM...
 if exist "%DEPLOY_DIR%nssm.exe" goto :nssm_ok
-echo [*] Dang tai NSSM...
+
+:: Thu winget truoc (nhanh hon, khong phu thuoc nssm.cc)
+echo [*] Dang cai NSSM qua winget...
+winget install NSSM.NSSM --silent --accept-package-agreements --accept-source-agreements >nul 2>&1
+for /f "tokens=*" %%i in ('where nssm 2^>nul') do (
+    copy "%%i" "%DEPLOY_DIR%nssm.exe" >nul 2>&1
+)
+if exist "%DEPLOY_DIR%nssm.exe" goto :nssm_ok
+
+:: Fallback: tai tu nssm.cc
+echo [*] winget that bai, thu tai tu nssm.cc...
 powershell -NoProfile -Command ^
     "Invoke-WebRequest -Uri 'https://nssm.cc/release/nssm-2.24.zip' -OutFile '%TEMP%\nssm.zip' -UseBasicParsing; ^
      Expand-Archive -Path '%TEMP%\nssm.zip' -DestinationPath '%TEMP%\nssm_ext' -Force; ^
      Copy-Item '%TEMP%\nssm_ext\nssm-2.24\win64\nssm.exe' '%DEPLOY_DIR%nssm.exe'"
+
 if not exist "%DEPLOY_DIR%nssm.exe" (
-    echo [FAIL] Khong tai duoc NSSM. Kiem tra ket noi internet roi thu lai.
+    echo [FAIL] Khong tai duoc NSSM.
+    echo        Cach fix: copy file deploy\nssm.exe tu may cu sang may nay, roi chay lai script.
     pause
     exit /b 1
 )

@@ -184,3 +184,16 @@ ngrok http --domain=<your-static-domain>.ngrok-free.app 8000
 - ngrok must stay running alongside the server
 - All data stored in PostgreSQL (Docker volume — persists across restarts)
 - Firebase service account JSON is required for push notifications (excluded from git)
+
+### Auto-start on Windows (Task Scheduler)
+
+Services are registered as scheduled tasks that fire at logon of the `tech` user:
+
+| Task | Delay | Method |
+|---|---|---|
+| TechNote | 3 min | `deploy/uvicorn-hidden.vbs` via wscript.exe |
+| TechNote-ngrok | 1.5 min | `deploy/ngrok-hidden.vbs` via wscript.exe |
+
+Docker Desktop is configured to auto-start and PostgreSQL auto-restarts via `restart: unless-stopped`.
+
+See `deploy/manual-install.md` for full step-by-step setup on a new machine.

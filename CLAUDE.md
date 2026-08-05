@@ -193,9 +193,12 @@ technote/
 │   └── styles.css
 ├── media/                 ← uploaded images (auto-created, excluded from git)
 ├── deploy/
-│   ├── package.ps1        ← builds technote-deploy.zip (excludes .env, secrets, .venv)
-│   ├── install.bat        ← first-time server setup (NSSM services)
-│   └── update.bat         ← update running server from ZIP
+│   ├── package.ps1           ← builds technote-deploy.zip (excludes .env, secrets, .venv)
+│   ├── install.bat           ← first-time server setup (auto, requires admin)
+│   ├── update.bat            ← update running server from ZIP
+│   ├── manual-install.md     ← step-by-step manual install guide
+│   ├── uvicorn-hidden.vbs    ← VBScript: launch uvicorn with hidden window
+│   └── ngrok-hidden.vbs      ← VBScript: launch ngrok with hidden window
 ├── docker-compose.yml
 ├── requirements.txt
 └── .env.example
@@ -244,6 +247,10 @@ VAPID_PUBLIC_KEY=<vapid_key_from_firebase_console>
 - [x] Feed sorted newest-first (GET /reports/unread → ORDER BY created_at DESC)
 - [x] Seen indicator always visible on own notes (✓ 0 grey → ✓ N green)
 - [x] deploy/ scripts: package.ps1 (ZIP builder) + install.bat + update.bat
+- [x] Server migration to new machine: manual install documented in deploy/manual-install.md
+- [x] Auto-start via Task Scheduler (AtLogOn "tech", Interactive): TechNote + TechNote-ngrok (3 delays)
+- [x] Hidden startup: deploy/uvicorn-hidden.vbs + deploy/ngrok-hidden.vbs (WshShell.Run window=0)
+- [x] install.bat: UAC self-elevation + prompts-first (step 3) + auto-relaunch after Python install
 
 ## Dev Setup
 
@@ -280,3 +287,7 @@ docker-compose up -d db
 - `/media` StaticFiles mount must come BEFORE frontend `/` catch-all mount in `main.py`
 - `bindCardImages` uses `e.stopPropagation()` + explicit `autoSeenNote` call — iOS Safari event bubble from `.card-image` to card is unreliable; cannot depend on bubble for seen tracking
 - Feed sort was ASC (oldest first) — fixed to DESC in `GET /reports/unread` query
+- `.env` created by PowerShell 5.1 `Out-File -Encoding utf8` adds BOM → `load_dotenv()` fails on first key; fix: `[System.IO.File]::WriteAllText(path, content, [System.Text.UTF8Encoding]::new($false))`
+- Task Scheduler with `LogonType S4U` requires elevated privilege not available on standard admin — use `LogonType Interactive` + VBS wrapper instead
+- `pythonw.exe` with uvicorn exits immediately (no stdout) — use `python.exe` launched via VBS `WshShell.Run ..., 0, False` to hide window
+- `docker-compose` not in PATH for Task Scheduler SYSTEM tasks — use Docker Desktop auto-start setting + `restart: unless-stopped` on db service instead of TechNote-StartDB task
