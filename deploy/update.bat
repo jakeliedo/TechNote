@@ -3,23 +3,20 @@ chcp 65001 >nul
 setlocal enabledelayedexpansion
 title TechNote Updater
 
+:: Tu dong xin quyen Administrator neu chua co
+net session >nul 2>&1
+if errorlevel 1 (
+    echo Dang yeu cau quyen Administrator...
+    powershell -NoProfile -Command "Start-Process '%~f0' -Verb RunAs"
+    exit /b
+)
+
 echo.
 echo  +==================================================+
 echo  ^|         TechNote Server Updater                  ^|
 echo  ^|         Club V e-Gaming - Doi Ky Thuat           ^|
 echo  +==================================================+
 echo.
-
-:: ============================================================
-:: 1. Kiem tra quyen Administrator
-:: ============================================================
-net session >nul 2>&1
-if errorlevel 1 (
-    echo [FAIL] Script nay phai chay voi quyen Administrator.
-    echo        Click phai vao file .bat nay, chon "Run as administrator".
-    pause
-    exit /b 1
-)
 echo [OK] Quyen Administrator
 
 :: ============================================================
