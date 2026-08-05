@@ -144,6 +144,16 @@ function dateKey(iso) {
 }
 
 // ── Report Card ───────────────────────────────────────────────────────────────
+function rxnBadgesHtml(reportId, reactions, myReaction) {
+  return REACTIONS
+    .filter(({ key }) => (reactions[key] || 0) > 0 || myReaction === key)
+    .map(({ key, icon }) => {
+      const count = reactions[key] || 0;
+      const mine = myReaction === key;
+      return `<button class="rxn-badge${mine ? ' mine' : ''}" data-id="${reportId}" data-reaction="${key}">${icon}<span class="rxn-count">${count > 0 ? count : ''}</span></button>`;
+    }).join('');
+}
+
 function reportCard(r, { unread = false } = {}) {
   const color = r.user?.badge_color || ACCENT;
   const isOwn = r.user_id === state.user?.id;
@@ -151,15 +161,6 @@ function reportCard(r, { unread = false } = {}) {
   const checkedByMe = r.checked_by_me || false;
   const rxns = r.reactions || {};
   const myRxn = r.my_reaction || null;
-
-  const reactionBarHtml = `<div class="reaction-bar">${
-    REACTIONS.map(({ key, icon }) => {
-      const count = rxns[key] || 0;
-      const active = myRxn === key;
-      return `<button class="reaction-btn${active ? ' active' : ''}" data-id="${r.id}" data-reaction="${key}">${
-        icon}<span class="reaction-count">${count > 0 ? count : ''}</span></button>`;
-    }).join('')
-  }</div>`;
 
   const checkPartHtml = isOwn
     ? `<span class="check-indicator">${checkCount > 0 ? '✓ ' + checkCount : ''}</span>`
@@ -179,7 +180,10 @@ function reportCard(r, { unread = false } = {}) {
       </div>
       <div class="card-body">${esc(r.body)}</div>
       <div class="card-footer">
-        ${reactionBarHtml}
+        <div class="rxn-cluster" data-report-id="${r.id}" data-my-reaction="${myRxn || ''}">
+          <div class="rxn-badges">${rxnBadgesHtml(r.id, rxns, myRxn)}</div>
+          <button class="rxn-trigger" data-id="${r.id}" title="Ấn giữ để chọn cảm xúc">😊</button>
+        </div>
         ${checkPartHtml}
       </div>
     </div>`;
@@ -190,7 +194,8 @@ function bindCardRead(container) {
     card.dataset.readBound = '1';
     card.addEventListener('click', async e => {
       if (e.target.closest('.check-btn')) return;
-      if (e.target.closest('.reaction-btn')) return;
+      if (e.target.closest('.rxn-badge')) return;
+      if (e.target.closest('.rxn-trigger')) return;
       const id = Number(card.dataset.id);
       await api('POST', `/reports/${id}/read`).catch(() => {});
       card.classList.remove('unread');
@@ -217,28 +222,131 @@ function bindCheckBtns(container) {
   });
 }
 
-function bindReactionBtns(container) {
-  container.querySelectorAll('.reaction-btn:not([data-bound])').forEach(btn => {
-    btn.dataset.bound = '1';
-    btn.addEventListener('click', async e => {
+// ── Reaction Picker ───────────────────────────────────────────────────────────
+let rxnPickerEl = null;
+
+function openRxnPicker(anchorEl, reportId, myReaction) {
+  closeRxnPicker();
+  const picker = document.createElement('div');
+  picker.className = 'rxn-picker';
+  REACTIONS.forEach(({ key, icon }) => {
+    const btn = document.createElement('button');
+    btn.className = `rxn-picker-btn${myReaction === key ? ' mine' : ''}`;
+    btn.textContent = icon;
+    btn.addEventListener('pointerdown', e => {
       e.stopPropagation();
-      const reportId = Number(btn.dataset.id);
-      const reaction = btn.dataset.reaction;
-      try {
-        const res = await api('POST', `/reports/${reportId}/react`, { reaction });
-        // Update all reaction buttons for this report card
-        const card = btn.closest('.report-card');
-        if (!card) return;
-        card.querySelectorAll('.reaction-btn').forEach(b => {
-          const key = b.dataset.reaction;
-          b.classList.toggle('active', res.reaction === key);
-          const count = res.counts[key] || 0;
-          b.querySelector('.reaction-count').textContent = count > 0 ? count : '';
-        });
-      } catch {
-        toast('Lỗi', 'error');
-      }
+      closeRxnPicker();
+      doReact(reportId, key);
     });
+    picker.appendChild(btn);
+  });
+  document.body.appendChild(picker);
+  rxnPickerEl = picker;
+
+  // Position above anchor button
+  const rect = anchorEl.getBoundingClientRect();
+  const pw = 138; // approx picker width
+  let left = rect.left + rect.width / 2 - pw / 2;
+  left = Math.max(8, Math.min(left, window.innerWidth - pw - 8));
+  picker.style.left = `${left}px`;
+  picker.style.top  = `${rect.top - 54}px`;
+
+  setTimeout(() => {
+    document.addEventListener('pointerdown', _rxnOutside, { capture: true, once: true });
+  }, 0);
+}
+
+function _rxnOutside(e) {
+  if (rxnPickerEl && !rxnPickerEl.contains(e.target)) closeRxnPicker();
+  else if (rxnPickerEl) {
+    // re-attach if click was inside picker (picker handles itself)
+    setTimeout(() => {
+      document.addEventListener('pointerdown', _rxnOutside, { capture: true, once: true });
+    }, 0);
+  }
+}
+
+function closeRxnPicker() {
+  rxnPickerEl?.remove();
+  rxnPickerEl = null;
+}
+
+async function doReact(reportId, reaction) {
+  try {
+    const res = await api('POST', `/reports/${reportId}/react`, { reaction });
+    updateRxnClusters(reportId, res.counts, res.reaction);
+  } catch {
+    toast('Lỗi', 'error');
+  }
+}
+
+function updateRxnClusters(reportId, counts, myReaction) {
+  document.querySelectorAll(`.rxn-cluster[data-report-id="${reportId}"]`).forEach(cluster => {
+    cluster.dataset.myReaction = myReaction || '';
+    const badgesDiv = cluster.querySelector('.rxn-badges');
+    if (!badgesDiv) return;
+    badgesDiv.innerHTML = rxnBadgesHtml(reportId, counts, myReaction || null);
+    badgesDiv.querySelectorAll('.rxn-badge').forEach(b => bindRxnBadge(b));
+  });
+}
+
+function _attachLongPress(el, onLong) {
+  let timer = null;
+  let fired = false;
+  const start = () => { fired = false; timer = setTimeout(() => { fired = true; onLong(); }, 450); };
+  const cancel = () => clearTimeout(timer);
+  const end = e => { cancel(); if (fired) e.preventDefault(); };
+  el.addEventListener('touchstart',   start,  { passive: true });
+  el.addEventListener('touchend',     end,    { passive: false });
+  el.addEventListener('touchmove',    cancel, { passive: true });
+  el.addEventListener('mousedown',    start);
+  el.addEventListener('mouseup',      cancel);
+  el.addEventListener('mouseleave',   cancel);
+  el.addEventListener('contextmenu',  e => { if (fired) e.preventDefault(); });
+}
+
+function bindRxnBadge(badge) {
+  let longFired = false;
+  let timer = null;
+  const start = () => {
+    longFired = false;
+    timer = setTimeout(() => {
+      longFired = true;
+      const cluster = badge.closest('.rxn-cluster');
+      openRxnPicker(badge, Number(badge.dataset.id), cluster?.dataset.myReaction || null);
+    }, 450);
+  };
+  const cancel = () => clearTimeout(timer);
+  const end = e => {
+    cancel();
+    if (longFired) { e.preventDefault?.(); return; }
+    e.stopPropagation();
+    doReact(Number(badge.dataset.id), badge.dataset.reaction);
+  };
+  badge.addEventListener('touchstart',  start,  { passive: true });
+  badge.addEventListener('touchend',    end,    { passive: false });
+  badge.addEventListener('touchmove',   cancel, { passive: true });
+  badge.addEventListener('mousedown',   start);
+  badge.addEventListener('mouseup',     end);
+  badge.addEventListener('mouseleave',  cancel);
+  badge.addEventListener('contextmenu', e => { if (longFired) e.preventDefault(); });
+}
+
+function bindRxnCluster(container) {
+  // Long-press on trigger → open picker
+  container.querySelectorAll('.rxn-trigger:not([data-bound])').forEach(trigger => {
+    trigger.dataset.bound = '1';
+    _attachLongPress(trigger, () => {
+      const cluster = trigger.closest('.rxn-cluster');
+      openRxnPicker(trigger, Number(trigger.dataset.id), cluster?.dataset.myReaction || null);
+    });
+    // Prevent short-click from doing anything (long-press only)
+    trigger.addEventListener('click', e => e.stopPropagation());
+  });
+  // Short-click badge = toggle, long-press badge = open picker
+  container.querySelectorAll('.rxn-badge:not([data-bound])').forEach(badge => {
+    badge.dataset.bound = '1';
+    bindRxnBadge(badge);
   });
 }
 
@@ -342,7 +450,7 @@ async function checkAwayLogic() {
   const awayList = document.getElementById('away-list');
   awayList.innerHTML = reports.map(r => reportCard(r)).join('');
   bindCheckBtns(awayList);
-  bindReactionBtns(awayList);
+  bindRxnCluster(awayList);
   document.getElementById('away-overlay').classList.remove('hidden');
 }
 
@@ -388,7 +496,7 @@ async function loadFeed() {
   setUnread(reports.length);
   bindCardRead(list);
   bindCheckBtns(list);
-  bindReactionBtns(list);
+  bindRxnCluster(list);
 }
 
 function setUnread(n) {
@@ -412,7 +520,7 @@ async function loadActivity() {
   empty.classList.add('hidden');
   list.innerHTML = reports.map(r => reportCard(r)).join('');
   bindCheckBtns(list);
-  bindReactionBtns(list);
+  bindRxnCluster(list);
 }
 
 // ── History ───────────────────────────────────────────────────────────────────
@@ -442,7 +550,7 @@ async function loadHistory() {
   }
   list.innerHTML = html;
   bindCheckBtns(list);
-  bindReactionBtns(list);
+  bindRxnCluster(list);
 }
 
 // ── Send report ───────────────────────────────────────────────────────────────
@@ -553,7 +661,7 @@ function onNewReport(r) {
     list.insertAdjacentHTML('afterbegin', reportCard(r, { unread: true }));
     bindCardRead(list);
     bindCheckBtns(list);
-    bindReactionBtns(list);
+    bindRxnCluster(list);
   }
 }
 
@@ -568,11 +676,14 @@ function onCheckUpdate({ report_id, check_count, user_id }) {
 }
 
 function onReactionUpdate({ report_id, user_id, counts }) {
-  // Skip echo of own action — UI already updated by API response
-  if (user_id === state.user?.id) return;
-  document.querySelectorAll(`.report-card[data-id="${report_id}"] .reaction-btn`).forEach(btn => {
-    const count = counts[btn.dataset.reaction] || 0;
-    btn.querySelector('.reaction-count').textContent = count > 0 ? count : '';
+  if (user_id === state.user?.id) return; // skip own echo
+  // Don't know the other user's myReaction, only update counts (keep local active state)
+  document.querySelectorAll(`.rxn-cluster[data-report-id="${report_id}"]`).forEach(cluster => {
+    const myReaction = cluster.dataset.myReaction || null;
+    const badgesDiv = cluster.querySelector('.rxn-badges');
+    if (!badgesDiv) return;
+    badgesDiv.innerHTML = rxnBadgesHtml(report_id, counts, myReaction);
+    badgesDiv.querySelectorAll('.rxn-badge').forEach(b => bindRxnBadge(b));
   });
 }
 
