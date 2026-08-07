@@ -480,8 +480,16 @@ async function initAuth() {
   try {
     state.user = await api('GET', '/users/me');
     showApp();
-  } catch {
-    showLogin();
+  } catch (e) {
+    if (e.message === '401') { showLogin(); return; }
+    // Network error (server chưa sẵn sàng) — thử lại sau 3 giây
+    await new Promise(r => setTimeout(r, 3000));
+    try {
+      state.user = await api('GET', '/users/me');
+      showApp();
+    } catch {
+      showLogin();
+    }
   }
 }
 
@@ -1028,6 +1036,19 @@ document.getElementById('away-close').addEventListener('click', async () => {
 
 window.addEventListener('online', () => { updateNetworkBanner(); processOfflineQueue(); });
 window.addEventListener('offline', updateNetworkBanner);
+
+// iOS PWA: reload khi trang được phục hồi từ back-forward cache
+window.addEventListener('pageshow', (e) => { if (e.persisted) window.location.reload(); });
+
+// Reload sau khi app bị ẩn > 1 giờ (tránh stale state trên iOS)
+let _hiddenAt = 0;
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') {
+    _hiddenAt = Date.now();
+  } else if (document.visibilityState === 'visible' && _hiddenAt) {
+    if (Date.now() - _hiddenAt > 60 * 60 * 1000) window.location.reload();
+  }
+});
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 initAuth();
