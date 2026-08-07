@@ -284,6 +284,8 @@ input, textarea { font-family: inherit; font-size: inherit; outline: none; }
 .report-textarea::placeholder { color: var(--text-2); }
 
 .btn-send { height: 52px; font-size: 16px; font-weight: 700; letter-spacing: 0.5px; }
+.btn-load-more { padding: 10px 32px; border-radius: 20px; border: 1.5px solid var(--border); background: var(--bg-2); color: var(--text-2); font-size: 14px; font-weight: 600; cursor: pointer; }
+.btn-load-more:active { background: var(--bg-3); }
 
 /* ── Home: image attachment ────────────────────────────────────────────────── */
 .textarea-wrap { position: relative; }

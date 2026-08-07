@@ -647,16 +647,35 @@ async function loadActivity() {
 }
 
 // ── History ───────────────────────────────────────────────────────────────────
-async function loadHistory() {
-  const from = new Date(Date.now() - 5 * 86_400_000).toISOString();
+const HISTORY_PAGE = 100;
+const HISTORY_FROM = () => new Date(Date.now() - 60 * 86_400_000).toISOString();
+let _historyOffset = 0;
+let _historyLoading = false;
+
+async function loadHistory(append = false) {
+  if (_historyLoading) return;
+  _historyLoading = true;
+
+  if (!append) {
+    _historyOffset = 0;
+    document.getElementById('history-list').innerHTML = '';
+  }
+
+  const from = HISTORY_FROM();
   const reports = await api('GET',
-    `/reports?from=${encodeURIComponent(from)}&limit=200`
+    `/reports?from=${encodeURIComponent(from)}&limit=${HISTORY_PAGE}&offset=${_historyOffset}`
   ).catch(() => []) || [];
 
   const list  = document.getElementById('history-list');
   const empty = document.getElementById('history-empty');
+  const more  = document.getElementById('history-load-more');
 
-  if (!reports.length) { list.innerHTML = ''; empty.classList.remove('hidden'); return; }
+  if (!append && !reports.length) {
+    empty.classList.remove('hidden');
+    more.classList.add('hidden');
+    _historyLoading = false;
+    return;
+  }
   empty.classList.add('hidden');
 
   const groups = {}, order = [];
@@ -666,17 +685,30 @@ async function loadHistory() {
     groups[k].push(r);
   }
 
-  let html = '';
+  const frag = document.createDocumentFragment();
   for (const k of order) {
-    html += `<div class="date-sep"><span>${fmtDateLabel(groups[k][0].created_at)}</span></div>`;
-    html += groups[k].map(r => reportCard(r)).join('');
+    const sep = document.createElement('div');
+    sep.className = 'date-sep';
+    sep.innerHTML = `<span>${fmtDateLabel(groups[k][0].created_at)}</span>`;
+    frag.appendChild(sep);
+    groups[k].forEach(r => {
+      const tmp = document.createElement('div');
+      tmp.innerHTML = reportCard(r);
+      frag.appendChild(tmp.firstElementChild);
+    });
   }
-  list.innerHTML = html;
+  list.appendChild(frag);
   bindCheckBtns(list);
   bindRxnCluster(list);
   bindLazyImages(list);
   bindCardImages(list);
+
+  _historyOffset += reports.length;
+  more.classList.toggle('hidden', reports.length < HISTORY_PAGE);
+  _historyLoading = false;
 }
+
+document.getElementById('history-load-more-btn').addEventListener('click', () => loadHistory(true));
 
 // ── Image attachment state ────────────────────────────────────────────────────
 let _pendingBlob = null;
