@@ -708,7 +708,7 @@ async function loadHistory(append = false) {
   _historyLoading = false;
 }
 
-document.getElementById('history-load-more-btn').addEventListener('click', () => loadHistory(true));
+document.getElementById('history-load-more-btn')?.addEventListener('click', () => loadHistory(true));
 
 // ── Image attachment state ────────────────────────────────────────────────────
 let _pendingBlob = null;
