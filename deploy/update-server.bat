@@ -27,7 +27,8 @@ set "BAT_DIR=%~dp0"
 if exist "!BAT_DIR!technote-deploy.zip" set "ZIP_FILE=!BAT_DIR!technote-deploy.zip"
 if "!ZIP_FILE!"=="" (
     echo [FAIL] technote-deploy.zip not found next to update-server.bat
-    pause & exit /b 1
+    pause
+exit /b 1
 )
 echo [OK] ZIP: !ZIP_FILE!
 
@@ -36,7 +37,8 @@ echo.
 echo  Will: stop uvicorn, extract ZIP, update packages, restart TechNote
 echo.
 set /p "CONFIRM=  Continue? [y/N]: "
-if /i not "!CONFIRM!"=="y" ( echo Cancelled. & pause & exit /b 0 )
+if /i not "!CONFIRM!"=="y" ( echo Cancelled. & pause
+exit /b 0 )
 
 :: ── Stop uvicorn ──────────────────────────────────────────────────────────────
 echo.
@@ -56,7 +58,8 @@ echo [*] Extracting update...
 powershell -NoProfile -Command "Expand-Archive -Path '!ZIP_FILE!' -DestinationPath '!APP_DIR!' -Force"
 if errorlevel 1 (
     echo [FAIL] Extract failed.
-    pause & exit /b 1
+    pause
+exit /b 1
 )
 echo [OK] Files updated
 
