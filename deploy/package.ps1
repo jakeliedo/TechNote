@@ -7,7 +7,7 @@ $root    = Split-Path -Parent $PSScriptRoot
 $outFile = Join-Path (Split-Path -Parent $root) "technote-deploy.zip"
 
 Write-Host ""
-Write-Host "[..] Tạo gói deploy: $outFile"
+Write-Host "[..] Building deploy package: $outFile"
 
 # Danh sách thư mục/file loại bỏ (không đưa vào ZIP)
 $excludeDirs  = @('.venv', '__pycache__', '.pytest_cache', '.git', 'logs')
@@ -32,7 +32,7 @@ $files = Get-ChildItem -Path $root -Recurse -File | Where-Object {
     return $true
 }
 
-Write-Host "[..] $($files.Count) files sẽ được đóng gói..."
+Write-Host "[..] $($files.Count) files will be packaged..."
 
 # Tạo ZIP bằng .NET ZipFile (hỗ trợ exclude chính xác)
 Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -46,18 +46,17 @@ foreach ($file in $files) {
 $zip.Dispose()
 
 $sizeMB = [math]::Round((Get-Item $outFile).Length / 1MB, 2)
-Write-Host "[OK] Gói tạo xong ($sizeMB MB): $outFile"
+Write-Host "[OK] Package ready ($sizeMB MB): $outFile"
 Write-Host ""
-Write-Host "Các bước tiếp theo:"
+Write-Host "Next steps:"
 Write-Host ""
-Write-Host "  -- CÀI ĐẶT LẦN ĐẦU (server mới) --"
-Write-Host "  1. Copy technote-deploy.zip lên server"
-Write-Host "  2. Giải nén vào thư mục (vd: C:\TechNote)"
-Write-Host "  3. Sao chép server\firebase-service-account.json vào server\firebase-service-account.json"
-Write-Host "  4. Chạy deploy\install.bat với quyền Administrator"
+Write-Host "  -- FIRST-TIME INSTALL (new server) --"
+Write-Host "  1. Copy technote-deploy.zip to the server"
+Write-Host "  2. Extract into a folder (e.g. C:\TechNote)"
+Write-Host "  3. Copy server\firebase-service-account.json into server\firebase-service-account.json"
+Write-Host "  4. Run deploy\install.bat as Administrator"
 Write-Host ""
-Write-Host "  -- CẬP NHẬT SERVER ĐANG CHẠY --"
-Write-Host "  1. Copy technote-deploy.zip vào thư mục CHA của project trên server"
-Write-Host "     (cùng cấp với thư mục TechNote, vd: C:\technote-deploy.zip)"
-Write-Host "  2. Chạy deploy\update.bat với quyền Administrator"
+Write-Host "  -- UPDATE RUNNING SERVER --"
+Write-Host "  1. Copy technote-deploy.zip + deploy\update-server.bat to the server"
+Write-Host "  2. Run update-server.bat as Administrator"
 Write-Host ""
